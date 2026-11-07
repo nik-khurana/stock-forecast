@@ -14,10 +14,13 @@ This service serves as the core coordinator between:
 """
 
 import time
+import logging
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
 
 from backend.app.alpaca_client import AlpacaClient
 from backend.app.feature_builder import FeatureBuilder
