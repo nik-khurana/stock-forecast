@@ -541,6 +541,193 @@
 
   </main>
 
+  <!-- Edit Stock Position & Buy/Sell Adjustment Modal -->
+  <div id="edit-position-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-md apple-glass rounded-3xl p-6 space-y-5 border border-black/[0.08] dark:border-white/[0.12] shadow-2xl relative">
+      <!-- Close Button -->
+      <button id="close-edit-modal-btn" type="button" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-1">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Modal Header -->
+      <div class="flex items-center space-x-3 pr-8">
+        <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+          <i data-lucide="edit-3" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Modify Stock Position</h3>
+          <p class="text-xs text-slate-400">Correct errors in symbol/price/qty or record a buy/sell trade.</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher Tabs: Direct Edit vs Buy More / Sell -->
+      <div class="flex p-1 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-xs">
+        <button id="edit-mode-direct-tab" type="button" class="flex-1 py-1.5 rounded-xl font-semibold transition bg-white dark:bg-white/15 text-indigo-600 dark:text-white shadow-sm">
+          Direct Edit (Fix Typo)
+        </button>
+        <button id="edit-mode-adjust-tab" type="button" class="flex-1 py-1.5 rounded-xl font-semibold transition text-slate-500 hover:text-slate-900 dark:hover:text-white">
+          Buy More / Sell
+        </button>
+      </div>
+
+      <!-- Tab 1: Direct Edit Form (Symbol, Shares, Avg Buy Price) -->
+      <form id="edit-position-form" class="space-y-4">
+        <input type="hidden" id="edit-holding-index" value="-1" />
+
+        <!-- Stock Symbol / Ticker -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Stock Symbol / Ticker</label>
+          <input
+            type="text"
+            id="edit-ticker-input"
+            required
+            class="w-full px-4 py-2.5 rounded-2xl apple-glass text-sm font-bold font-mono uppercase text-slate-900 dark:text-white border border-black/[0.08] dark:border-white/[0.12] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="e.g. AAPL"
+          />
+          <p class="text-[11px] text-slate-400">Fix typo in symbol (e.g. MICRON &rarr; MU, SPCX &rarr; SPY).</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Shares Quantity -->
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Total Shares</label>
+            <input
+              type="number"
+              step="any"
+              min="0.0001"
+              id="edit-shares-input"
+              required
+              class="w-full px-4 py-2.5 rounded-2xl apple-glass text-sm font-semibold text-slate-900 dark:text-white border border-black/[0.08] dark:border-white/[0.12] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="10"
+            />
+          </div>
+
+          <!-- Avg Buy Price -->
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Avg Buy Price ($)</label>
+            <input
+              type="number"
+              step="any"
+              min="0.01"
+              id="edit-buy-price-input"
+              required
+              class="w-full px-4 py-2.5 rounded-2xl apple-glass text-sm font-semibold text-slate-900 dark:text-white border border-black/[0.08] dark:border-white/[0.12] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="150.00"
+            />
+          </div>
+        </div>
+
+        <!-- Calculated Summary Box -->
+        <div class="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between text-xs font-mono">
+          <span class="text-slate-400">Calculated Cost Basis:</span>
+          <span id="edit-new-cost-basis" class="font-bold text-slate-900 dark:text-white">$0.00</span>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2 pt-1">
+          <button
+            type="button"
+            id="cancel-edit-btn"
+            class="flex-1 py-2.5 rounded-2xl apple-glass text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="save-edit-btn"
+            class="flex-1 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/25 transition"
+          >
+            Save Changes
+          </button>
+        </div>
+      </form>
+
+      <!-- Tab 2: Buy More / Sell Partial Form -->
+      <form id="adjust-position-form" class="space-y-4 hidden">
+        <!-- Action Type: Buy More vs Sell Partial -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button type="button" id="adjust-action-buy" class="py-2 rounded-xl font-bold border border-emerald-500/30 bg-emerald-500/15 text-emerald-500 flex items-center justify-center space-x-1.5 transition">
+            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+            <span>Buy More</span>
+          </button>
+          <button type="button" id="adjust-action-sell" class="py-2 rounded-xl font-bold border border-black/[0.08] dark:border-white/[0.1] text-slate-400 hover:text-rose-500 flex items-center justify-center space-x-1.5 transition">
+            <i data-lucide="minus-circle" class="w-3.5 h-3.5"></i>
+            <span>Sell Partial</span>
+          </button>
+        </div>
+
+        <!-- Stock Symbol Display Pill -->
+        <div class="p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between text-xs">
+          <span class="text-slate-400">Position Target:</span>
+          <span id="adjust-target-ticker" class="font-bold font-mono text-indigo-500 uppercase">AAPL</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Quantity to Buy or Sell -->
+          <div class="space-y-1.5">
+            <label id="adjust-qty-label" class="text-xs font-semibold text-slate-600 dark:text-slate-300">Shares to Buy</label>
+            <input
+              type="number"
+              step="any"
+              min="0.0001"
+              id="adjust-shares-input"
+              required
+              class="w-full px-4 py-2.5 rounded-2xl apple-glass text-sm font-semibold text-slate-900 dark:text-white border border-black/[0.08] dark:border-white/[0.12] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="5"
+            />
+          </div>
+
+          <!-- Execution Price -->
+          <div class="space-y-1.5">
+            <label id="adjust-price-label" class="text-xs font-semibold text-slate-600 dark:text-slate-300">Execution Price ($)</label>
+            <input
+              type="number"
+              step="any"
+              min="0.01"
+              id="adjust-price-input"
+              class="w-full px-4 py-2.5 rounded-2xl apple-glass text-sm font-semibold text-slate-900 dark:text-white border border-black/[0.08] dark:border-white/[0.12] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="160.00"
+            />
+          </div>
+        </div>
+
+        <!-- Preview of new combined totals -->
+        <div class="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-1.5 text-xs font-mono">
+          <div class="flex justify-between text-slate-400">
+            <span>Resulting Total Shares:</span>
+            <span id="adjust-preview-shares" class="font-bold text-slate-900 dark:text-white">0</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>New Avg Buy Price:</span>
+            <span id="adjust-preview-avg-price" class="font-bold text-indigo-500">$0.00</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>New Total Cost Basis:</span>
+            <span id="adjust-preview-cost-basis" class="font-bold text-slate-900 dark:text-white">$0.00</span>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2 pt-1">
+          <button
+            type="button"
+            id="cancel-adjust-btn"
+            class="flex-1 py-2.5 rounded-2xl apple-glass text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="apply-adjust-btn"
+            class="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 transition"
+          >
+            Apply Trade
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Vault Unlock Passcode Prompt Overlay -->
   <div id="vault-unlock-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
     <div class="w-full max-w-sm apple-glass rounded-3xl p-6 space-y-4 border border-black/[0.08] dark:border-white/[0.12] text-center shadow-2xl">

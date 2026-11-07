@@ -218,7 +218,10 @@
           <!-- Price & Change -->
           <div class="flex items-baseline space-x-4">
             <div class="text-right">
-              <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Current Price</div>
+              <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold flex items-center justify-end space-x-1.5">
+                <span id="price-session-label">Current Price</span>
+                <span id="price-session-badge" class="hidden text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase"></span>
+              </div>
               <div id="current-price" class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">$342.41</div>
             </div>
             <div id="change-pill" class="px-3 py-1.5 rounded-2xl font-bold text-xs flex items-center space-x-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">

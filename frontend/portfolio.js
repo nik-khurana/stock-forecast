@@ -23,6 +23,11 @@ let currentVaultPasscode = null;
 let showPortfolioSupportLine = true;
 let holdingsSortOrder = "asc";
 let isMarketSessionOpen = false;
+let currentMarketSession = "closed";
+
+// Active Position Edit & Trade Adjustment State
+let currentEditHoldingIndex = -1;
+let currentAdjustAction = "buy"; // "buy" or "sell"
 
 // Live 10-Second Market Streaming State
 let portfolioLiveTimer = null;
@@ -721,6 +726,318 @@ function initPortfolioEventListeners() {
       }
     });
   }
+
+  // Edit Position Modal Event Listeners
+  const closeEditBtn = document.getElementById("close-edit-modal-btn");
+  const cancelEditBtn = document.getElementById("cancel-edit-btn");
+  const cancelAdjustBtn = document.getElementById("cancel-adjust-btn");
+  const editModal = document.getElementById("edit-position-modal");
+
+  if (closeEditBtn) closeEditBtn.addEventListener("click", closeEditPositionModal);
+  if (cancelEditBtn) cancelEditBtn.addEventListener("click", closeEditPositionModal);
+  if (cancelAdjustBtn) cancelAdjustBtn.addEventListener("click", closeEditPositionModal);
+
+  if (editModal) {
+    editModal.addEventListener("click", (e) => {
+      if (e.target === editModal) closeEditPositionModal();
+    });
+  }
+
+  const directTab = document.getElementById("edit-mode-direct-tab");
+  const adjustTab = document.getElementById("edit-mode-adjust-tab");
+  if (directTab) directTab.addEventListener("click", () => setEditMode("direct"));
+  if (adjustTab) adjustTab.addEventListener("click", () => setEditMode("adjust"));
+
+  const adjustBuyBtn = document.getElementById("adjust-action-buy");
+  const adjustSellBtn = document.getElementById("adjust-action-sell");
+  if (adjustBuyBtn) adjustBuyBtn.addEventListener("click", () => setAdjustAction("buy"));
+  if (adjustSellBtn) adjustSellBtn.addEventListener("click", () => setAdjustAction("sell"));
+
+  const editSharesInput = document.getElementById("edit-shares-input");
+  const editPriceInput = document.getElementById("edit-buy-price-input");
+  if (editSharesInput) editSharesInput.addEventListener("input", updateDirectEditCostBasis);
+  if (editPriceInput) editPriceInput.addEventListener("input", updateDirectEditCostBasis);
+
+  const adjustSharesInput = document.getElementById("adjust-shares-input");
+  const adjustPriceInput = document.getElementById("adjust-price-input");
+  if (adjustSharesInput) adjustSharesInput.addEventListener("input", updateAdjustPreview);
+  if (adjustPriceInput) adjustPriceInput.addEventListener("input", updateAdjustPreview);
+
+  const directForm = document.getElementById("edit-position-form");
+  const adjustForm = document.getElementById("adjust-position-form");
+  if (directForm) directForm.addEventListener("submit", handleDirectEditSubmit);
+  if (adjustForm) adjustForm.addEventListener("submit", handleAdjustPositionSubmit);
+}
+
+/**
+ * Opens the Edit Stock Position modal pre-populated with the chosen holding's details.
+ */
+function openEditPositionModal(index) {
+  if (index < 0 || index >= portfolioHoldings.length) return;
+  currentEditHoldingIndex = index;
+  const holding = portfolioHoldings[index];
+  const modal = document.getElementById("edit-position-modal");
+  if (!modal) return;
+
+  // Pre-fill Direct Edit Form
+  const idxInput = document.getElementById("edit-holding-index");
+  const tickerInput = document.getElementById("edit-ticker-input");
+  const sharesInput = document.getElementById("edit-shares-input");
+  const priceInput = document.getElementById("edit-buy-price-input");
+  const costBasisElem = document.getElementById("edit-new-cost-basis");
+
+  if (idxInput) idxInput.value = index;
+  if (tickerInput) tickerInput.value = holding.ticker;
+  if (sharesInput) sharesInput.value = holding.shares;
+  if (priceInput) priceInput.value = holding.buy_price.toFixed(2);
+  if (costBasisElem) {
+    costBasisElem.textContent = `$${(holding.shares * holding.buy_price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  }
+
+  // Pre-fill Buy More / Sell Form
+  const targetTicker = document.getElementById("adjust-target-ticker");
+  const adjustSharesInput = document.getElementById("adjust-shares-input");
+  const adjustPriceInput = document.getElementById("adjust-price-input");
+
+  if (targetTicker) targetTicker.textContent = holding.ticker;
+  if (adjustSharesInput) adjustSharesInput.value = "";
+
+  // Pre-fill execution price with live quote if available, else holding's avg buy price
+  let liveQuotePrice = holding.buy_price;
+  if (portfolioForecastData && portfolioForecastData.holdings_breakdown) {
+    const match = portfolioForecastData.holdings_breakdown.find((item) => item.ticker === holding.ticker);
+    if (match && match.current_price) {
+      liveQuotePrice = match.current_price;
+    }
+  }
+  if (adjustPriceInput) adjustPriceInput.value = liveQuotePrice.toFixed(2);
+
+  // Set default action to "buy" and mode to "direct"
+  setEditMode("direct");
+  setAdjustAction("buy");
+  updateAdjustPreview();
+
+  modal.classList.remove("hidden");
+  if (tickerInput) {
+    tickerInput.focus();
+    tickerInput.select();
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+/**
+ * Closes the Edit Stock Position modal and clears state.
+ */
+function closeEditPositionModal() {
+  const modal = document.getElementById("edit-position-modal");
+  if (modal) modal.classList.add("hidden");
+  currentEditHoldingIndex = -1;
+}
+
+/**
+ * Toggles between "Direct Edit" (fix typos in symbol/price/qty) and "Buy More / Sell Partial".
+ */
+function setEditMode(mode) {
+  const directTab = document.getElementById("edit-mode-direct-tab");
+  const adjustTab = document.getElementById("edit-mode-adjust-tab");
+  const directForm = document.getElementById("edit-position-form");
+  const adjustForm = document.getElementById("adjust-position-form");
+
+  if (mode === "direct") {
+    if (directTab) directTab.className = "flex-1 py-1.5 rounded-xl font-semibold transition bg-white dark:bg-white/15 text-indigo-600 dark:text-white shadow-sm";
+    if (adjustTab) adjustTab.className = "flex-1 py-1.5 rounded-xl font-semibold transition text-slate-500 hover:text-slate-900 dark:hover:text-white";
+    if (directForm) directForm.classList.remove("hidden");
+    if (adjustForm) adjustForm.classList.add("hidden");
+  } else {
+    if (adjustTab) adjustTab.className = "flex-1 py-1.5 rounded-xl font-semibold transition bg-white dark:bg-white/15 text-indigo-600 dark:text-white shadow-sm";
+    if (directTab) directTab.className = "flex-1 py-1.5 rounded-xl font-semibold transition text-slate-500 hover:text-slate-900 dark:hover:text-white";
+    if (adjustForm) adjustForm.classList.remove("hidden");
+    if (directForm) directForm.classList.add("hidden");
+    updateAdjustPreview();
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+/**
+ * Toggles between "Buy More" and "Sell Partial" within the adjustment mode.
+ */
+function setAdjustAction(action) {
+  currentAdjustAction = action;
+  const buyBtn = document.getElementById("adjust-action-buy");
+  const sellBtn = document.getElementById("adjust-action-sell");
+  const qtyLabel = document.getElementById("adjust-qty-label");
+  const applyBtn = document.getElementById("apply-adjust-btn");
+
+  if (action === "buy") {
+    if (buyBtn) buyBtn.className = "py-2 rounded-xl font-bold border border-emerald-500/30 bg-emerald-500/15 text-emerald-500 flex items-center justify-center space-x-1.5 transition";
+    if (sellBtn) sellBtn.className = "py-2 rounded-xl font-bold border border-black/[0.08] dark:border-white/[0.1] text-slate-400 hover:text-rose-500 flex items-center justify-center space-x-1.5 transition";
+    if (qtyLabel) qtyLabel.textContent = "Shares to Buy (+)";
+    if (applyBtn) {
+      applyBtn.className = "flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 transition";
+      applyBtn.textContent = "Apply Buy";
+    }
+  } else {
+    if (sellBtn) sellBtn.className = "py-2 rounded-xl font-bold border border-rose-500/30 bg-rose-500/15 text-rose-500 flex items-center justify-center space-x-1.5 transition";
+    if (buyBtn) buyBtn.className = "py-2 rounded-xl font-bold border border-black/[0.08] dark:border-white/[0.1] text-slate-400 hover:text-emerald-500 flex items-center justify-center space-x-1.5 transition";
+    if (qtyLabel) qtyLabel.textContent = "Shares to Sell (-)";
+    if (applyBtn) {
+      applyBtn.className = "flex-1 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-500/25 transition";
+      applyBtn.textContent = "Apply Sell";
+    }
+  }
+  updateAdjustPreview();
+  if (window.lucide) lucide.createIcons();
+}
+
+/**
+ * Recalculates cost basis in real-time as user types in the Direct Edit form.
+ */
+function updateDirectEditCostBasis() {
+  const shares = parseFloat(document.getElementById("edit-shares-input").value) || 0;
+  const price = parseFloat(document.getElementById("edit-buy-price-input").value) || 0;
+  const costBasis = shares * price;
+  const el = document.getElementById("edit-new-cost-basis");
+  if (el) {
+    el.textContent = `$${costBasis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  }
+}
+
+/**
+ * Dynamically computes preview of total shares, weighted average price, and cost basis in Trade mode.
+ */
+function updateAdjustPreview() {
+  if (currentEditHoldingIndex < 0 || currentEditHoldingIndex >= portfolioHoldings.length) return;
+  const holding = portfolioHoldings[currentEditHoldingIndex];
+  const tradeShares = parseFloat(document.getElementById("adjust-shares-input").value) || 0;
+  const tradePrice = parseFloat(document.getElementById("adjust-price-input").value) || holding.buy_price;
+
+  let newShares = holding.shares;
+  let newAvgPrice = holding.buy_price;
+  let newCostBasis = holding.shares * holding.buy_price;
+
+  if (currentAdjustAction === "buy") {
+    newShares = holding.shares + tradeShares;
+    newCostBasis = holding.shares * holding.buy_price + tradeShares * tradePrice;
+    newAvgPrice = newShares > 0 ? newCostBasis / newShares : 0;
+  } else {
+    newShares = Math.max(0, holding.shares - tradeShares);
+    newAvgPrice = holding.buy_price;
+    newCostBasis = newShares * newAvgPrice;
+  }
+
+  const prevSharesElem = document.getElementById("adjust-preview-shares");
+  const prevAvgElem = document.getElementById("adjust-preview-avg-price");
+  const prevBasisElem = document.getElementById("adjust-preview-cost-basis");
+
+  if (prevSharesElem) prevSharesElem.textContent = `${newShares.toLocaleString()}`;
+  if (prevAvgElem) prevAvgElem.textContent = `$${newAvgPrice.toFixed(2)}`;
+  if (prevBasisElem) prevBasisElem.textContent = `$${newCostBasis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+}
+
+/**
+ * Handles saving changes from the Direct Edit form.
+ */
+async function handleDirectEditSubmit(e) {
+  e.preventDefault();
+  if (currentEditHoldingIndex < 0 || currentEditHoldingIndex >= portfolioHoldings.length) return;
+
+  const rawTicker = document.getElementById("edit-ticker-input").value.trim().toUpperCase();
+  const shares = parseFloat(document.getElementById("edit-shares-input").value);
+  const buyPrice = parseFloat(document.getElementById("edit-buy-price-input").value);
+
+  if (!rawTicker) {
+    showToast("Please enter a valid stock symbol.", "error");
+    return;
+  }
+  if (isNaN(shares) || shares <= 0) {
+    showToast("Please enter a positive share quantity.", "error");
+    return;
+  }
+  if (isNaN(buyPrice) || buyPrice <= 0) {
+    showToast("Please enter a valid average purchase price.", "error");
+    return;
+  }
+
+  // Resolve ticker if company name entered
+  let resolvedTicker = rawTicker;
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(rawTicker)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const exact = data.results.find((r) => r.ticker === rawTicker || r.name.toUpperCase() === rawTicker);
+        if (exact) resolvedTicker = exact.ticker;
+        else if (data.results[0].ticker) resolvedTicker = data.results[0].ticker;
+      }
+    }
+  } catch (err) {}
+
+  portfolioHoldings[currentEditHoldingIndex] = {
+    ticker: resolvedTicker,
+    shares: shares,
+    buy_price: buyPrice,
+    added_at: portfolioHoldings[currentEditHoldingIndex].added_at || new Date().toISOString()
+  };
+
+  await savePortfolioVault();
+  renderHoldingsTable();
+  fetchPortfolioForecast();
+  closeEditPositionModal();
+  showToast(`Updated ${resolvedTicker} position (${shares} shares @ $${buyPrice.toFixed(2)})`, "success");
+}
+
+/**
+ * Handles executing a Buy More or Sell Partial transaction on an existing holding.
+ */
+async function handleAdjustPositionSubmit(e) {
+  e.preventDefault();
+  if (currentEditHoldingIndex < 0 || currentEditHoldingIndex >= portfolioHoldings.length) return;
+  const holding = portfolioHoldings[currentEditHoldingIndex];
+
+  const tradeShares = parseFloat(document.getElementById("adjust-shares-input").value);
+  const tradePrice = parseFloat(document.getElementById("adjust-price-input").value);
+
+  if (isNaN(tradeShares) || tradeShares <= 0) {
+    showToast("Please enter a valid quantity of shares.", "error");
+    return;
+  }
+
+  if (currentAdjustAction === "buy") {
+    if (isNaN(tradePrice) || tradePrice <= 0) {
+      showToast("Please enter a valid execution price for the purchase.", "error");
+      return;
+    }
+    const totalShares = holding.shares + tradeShares;
+    const totalCost = holding.shares * holding.buy_price + tradeShares * tradePrice;
+    const newAvgPrice = totalCost / totalShares;
+
+    holding.shares = totalShares;
+    holding.buy_price = newAvgPrice;
+    showToast(`Bought +${tradeShares} ${holding.ticker} (Now ${totalShares} shares @ $${newAvgPrice.toFixed(2)} avg)`, "success");
+  } else {
+    // Sell partial
+    if (tradeShares > holding.shares) {
+      showToast(`Cannot sell ${tradeShares} shares: you only own ${holding.shares} shares.`, "error");
+      return;
+    }
+    const remainingShares = holding.shares - tradeShares;
+    if (remainingShares === 0) {
+      portfolioHoldings.splice(currentEditHoldingIndex, 1);
+      showToast(`Sold all ${holding.ticker} shares. Position closed.`, "info");
+    } else {
+      holding.shares = remainingShares;
+      showToast(`Sold ${tradeShares} ${holding.ticker} shares (${remainingShares} shares remaining)`, "success");
+    }
+  }
+
+  await savePortfolioVault();
+  renderHoldingsTable();
+  if (portfolioHoldings.length > 0) {
+    fetchPortfolioForecast();
+  } else {
+    clearPortfolioForecastUI();
+  }
+  closeEditPositionModal();
 }
 
 /**
@@ -945,12 +1262,25 @@ function renderHoldingsTable() {
       <td class="py-3 px-4 text-right font-semibold ${pnlColor} privacy-value">${pnlStr}</td>
       <td class="py-3 px-4 text-right text-slate-400">${weightStr}</td>
       <td class="py-3 px-4 text-center">
-        <button class="delete-holding-btn text-slate-400 hover:text-rose-500 transition p-1" data-index="${idx}" title="Remove stock">
-          <i data-lucide="trash-2" class="w-4 h-4"></i>
-        </button>
+        <div class="flex items-center justify-center space-x-1">
+          <button class="edit-holding-btn text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition p-1.5 rounded-lg hover:bg-indigo-500/10" data-index="${idx}" title="Edit position / Buy / Sell">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+          </button>
+          <button class="delete-holding-btn text-slate-400 hover:text-rose-500 transition p-1.5 rounded-lg hover:bg-rose-500/10" data-index="${idx}" title="Remove stock">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
       </td>
     `;
     tbody.appendChild(tr);
+  });
+
+  // Attach edit buttons
+  tbody.querySelectorAll(".edit-holding-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.getAttribute("data-index"), 10);
+      openEditPositionModal(idx);
+    });
   });
 
   // Attach delete buttons
@@ -1564,18 +1894,22 @@ function populatePortfolioMonthlyTable(monthlyPoints) {
 
 /**
  * Checks backend health and updates the live US market session status pill.
+ * Fully supports regular market hours, extended pre-market, and extended after-hours.
  */
 async function checkPortfolioMarketStatus() {
   try {
     const urlParams = new URLSearchParams(window.location.search);
     const isSimulateOpen = urlParams.get("simulate_open") === "true";
-    const res = await fetch(`/api/health${isSimulateOpen ? "?simulate_open=true" : ""}`);
+    const simSession = urlParams.get("simulate_session") || "";
+    const sessionQuery = simSession ? `&simulate_session=${encodeURIComponent(simSession)}` : "";
+    const res = await fetch(`/api/health?simulate_open=${isSimulateOpen}${sessionQuery}`);
     if (!res.ok) return;
     const data = await res.json();
     if (data.market_status) {
       const ms = data.market_status;
-      isMarketSessionOpen = !!ms.is_open;
-      updatePriceColumnHeader(isMarketSessionOpen);
+      isMarketSessionOpen = !!ms.is_live;
+      currentMarketSession = ms.session || (ms.is_open ? "regular" : "closed");
+      updatePriceColumnHeader(isMarketSessionOpen, currentMarketSession);
 
       const pill = document.getElementById("market-status-pill");
       const dot = document.getElementById("market-dot");
@@ -1583,9 +1917,15 @@ async function checkPortfolioMarketStatus() {
       if (pill && dot && text) {
         text.textContent = `${ms.label} (${ms.et_time})`;
         pill.title = ms.sub_label || ms.label;
-        if (ms.is_open) {
+        if (ms.session === "regular") {
           dot.className = "w-2 h-2 rounded-full bg-emerald-500 market-pulse-emerald";
           pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md";
+        } else if (ms.session === "pre_market") {
+          dot.className = "w-2 h-2 rounded-full bg-cyan-400 market-pulse-cyan";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 backdrop-blur-md";
+        } else if (ms.session === "after_hours") {
+          dot.className = "w-2 h-2 rounded-full bg-indigo-400 market-pulse-indigo";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 backdrop-blur-md";
         } else {
           dot.className = "w-2 h-2 rounded-full bg-amber-500 market-pulse-amber";
           pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
@@ -1600,17 +1940,32 @@ async function checkPortfolioMarketStatus() {
 
 /**
  * Synchronizes the 10-second live background streaming interval for portfolio forecasts.
- * Active when US markets are open, tab is visible, vault is unlocked, and positions exist.
+ * Active when regular or extended US markets are open, tab is visible, vault is unlocked, and positions exist.
  */
 function syncPortfolioLiveStreaming() {
   const isDocumentVisible = !document.hidden;
   const shouldStream = isMarketSessionOpen && isDocumentVisible && portfolioHoldings.length > 0 && !isVaultLocked;
   const badge = document.getElementById("portfolio-live-badge");
+  const dot = document.getElementById("portfolio-live-dot");
 
   if (badge) {
     if (shouldStream) {
       badge.classList.remove("hidden");
       badge.classList.add("flex");
+      const labelSpan = badge.querySelector("span:not(#portfolio-live-dot)");
+      if (currentMarketSession === "pre_market") {
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 text-[11px] font-semibold backdrop-blur-md";
+        if (labelSpan) labelSpan.textContent = "10s Pre-Market Live";
+      } else if (currentMarketSession === "after_hours") {
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-indigo-400 animate-pulse";
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-semibold backdrop-blur-md";
+        if (labelSpan) labelSpan.textContent = "10s After-Hours Live";
+      } else {
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md";
+        if (labelSpan) labelSpan.textContent = "10s Live Sync";
+      }
     } else {
       badge.classList.add("hidden");
       badge.classList.remove("flex");
@@ -1620,7 +1975,7 @@ function syncPortfolioLiveStreaming() {
   if (shouldStream) {
     if (!portfolioLiveTimer) {
       portfolioLiveTimer = setInterval(triggerPortfolioLiveRefresh, LIVE_PORTFOLIO_INTERVAL_MS);
-      console.log(`[Portfolio Live] Started 10s streaming interval (${1000 / (LIVE_PORTFOLIO_INTERVAL_MS / 1000)} req/min) for ${portfolioHoldings.length} holdings`);
+      console.log(`[Portfolio Live] Started 10s streaming interval (${currentMarketSession})`);
     }
   } else {
     if (portfolioLiveTimer) {
@@ -1663,17 +2018,25 @@ function initPortfolioVisibilityListener() {
 /**
  * Updates Active Stock Positions table price column header based on market session state.
  * When market is open: "Live Price" (with pulsating live green indicator).
+ * When pre-market: "Pre-Market Price" (pulsating cyan indicator).
+ * When after-hours: "After-Hours Price" (pulsating indigo indicator).
  * When market is closed: "Price at Close".
  */
-function updatePriceColumnHeader(isOpen) {
+function updatePriceColumnHeader(isOpen, session = "regular") {
   const th = document.getElementById("th-current-price");
   if (!th) return;
-  if (isOpen) {
-    th.innerHTML = `<span>Live Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Market Open (Live Price)"></span>`;
-    th.title = "Live streaming market price during open trading session";
-  } else {
+  if (!isOpen || session === "closed") {
     th.innerHTML = `<span>Price at Close</span>`;
     th.title = "Official closing price from the most recent trading session";
+  } else if (session === "pre_market") {
+    th.innerHTML = `<span>Pre-Market Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse ml-0.5" title="Pre-Market Live Stream (4:00 AM – 9:30 AM ET)"></span>`;
+    th.title = "Live streaming pre-market quote (4:00 AM – 9:30 AM ET)";
+  } else if (session === "after_hours") {
+    th.innerHTML = `<span>After-Hours Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse ml-0.5" title="After-Hours Live Stream (4:00 PM – 8:00 PM ET)"></span>`;
+    th.title = "Live streaming after-hours quote (4:00 PM – 8:00 PM ET)";
+  } else {
+    th.innerHTML = `<span>Live Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Regular Session Live Price (9:30 AM – 4:00 PM ET)"></span>`;
+    th.title = "Live streaming market price during NYSE / NASDAQ regular trading";
   }
 }
 

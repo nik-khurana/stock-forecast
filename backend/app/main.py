@@ -82,34 +82,66 @@ def enforce_rate_limit(client_ip: str):
     fresh_timestamps.append(now)
     _IP_REQUEST_LOGS[client_ip] = fresh_timestamps
 
-def get_market_status(simulate_open: bool = False) -> Dict[str, Any]:
+def get_market_status(simulate_open: bool = False, simulate_session: Optional[str] = None) -> Dict[str, Any]:
     """
     Computes current NYSE / NASDAQ trading session status in US Eastern Time (ET).
-    - Regular Hours: Monday - Friday 9:30 AM - 4:00 PM ET
-    - Pre-Market: Monday - Friday 4:00 AM - 9:30 AM ET
-    - After-Hours: Monday - Friday 4:00 PM - 8:00 PM ET
+    - Regular Trading Hours: Monday - Friday 9:30 AM - 4:00 PM ET
+    - Extended Pre-Market: Monday - Friday 4:00 AM - 9:30 AM ET
+    - Extended After-Hours: Monday - Friday 4:00 PM - 8:00 PM ET
     - Closed: Weekends and 8:00 PM - 4:00 AM ET
     """
     now_et = datetime.now(ZoneInfo("America/New_York"))
     weekday = now_et.weekday()  # 0=Mon, 4=Fri, 5=Sat, 6=Sun
     minute_of_day = now_et.hour * 60 + now_et.minute
 
-    if simulate_open:
-        return {
-            "is_open": True,
-            "session": "regular",
-            "label": "Market Open (Simulated Live)",
-            "sub_label": "Testing 10s streaming sync",
-            "et_time": now_et.strftime("%I:%M %p ET"),
-            "color": "emerald",
-            "polling_interval_seconds": 10,
-        }
+    # Simulation override for testing live streaming and extended hours
+    if simulate_open or simulate_session:
+        target_session = (simulate_session or "regular").lower().strip()
+        if target_session == "pre_market":
+            return {
+                "is_open": False,
+                "is_extended_hours": True,
+                "is_live": True,
+                "session": "pre_market",
+                "label": "Pre-Market Live (Simulated)",
+                "sub_label": "Pre-market trading (Opens 9:30 AM ET)",
+                "et_time": now_et.strftime("%I:%M %p ET"),
+                "color": "cyan",
+                "polling_interval_seconds": 10,
+            }
+        elif target_session == "after_hours":
+            return {
+                "is_open": False,
+                "is_extended_hours": True,
+                "is_live": True,
+                "session": "after_hours",
+                "label": "After-Hours Live (Simulated)",
+                "sub_label": "After-hours trading (Closes 8:00 PM ET)",
+                "et_time": now_et.strftime("%I:%M %p ET"),
+                "color": "indigo",
+                "polling_interval_seconds": 10,
+            }
+        else:
+            return {
+                "is_open": True,
+                "is_extended_hours": False,
+                "is_live": True,
+                "session": "regular",
+                "label": "Market Open (Simulated Live)",
+                "sub_label": "Testing 10s streaming sync",
+                "et_time": now_et.strftime("%I:%M %p ET"),
+                "color": "emerald",
+                "polling_interval_seconds": 10,
+            }
 
     if weekday >= 5:
         return {
             "is_open": False,
+            "is_extended_hours": False,
+            "is_live": False,
             "session": "closed",
             "label": "Market Closed (Weekend)",
+            "sub_label": "Pre-market opens Monday 4:00 AM ET",
             "et_time": now_et.strftime("%I:%M %p ET"),
             "color": "amber",
         }
@@ -117,33 +149,44 @@ def get_market_status(simulate_open: bool = False) -> Dict[str, Any]:
     if 570 <= minute_of_day < 960:
         return {
             "is_open": True,
+            "is_extended_hours": False,
+            "is_live": True,
             "session": "regular",
             "label": "Market Open",
-            "sub_label": "NYSE / NASDAQ regular trading",
+            "sub_label": "NYSE / NASDAQ regular trading (9:30 AM – 4:00 PM ET)",
             "et_time": now_et.strftime("%I:%M %p ET"),
             "color": "emerald",
+            "polling_interval_seconds": 10,
         }
     elif 240 <= minute_of_day < 570:
         return {
             "is_open": False,
+            "is_extended_hours": True,
+            "is_live": True,
             "session": "pre_market",
-            "label": "Pre-Market Session",
-            "sub_label": "Opens at 9:30 AM ET",
+            "label": "Pre-Market Live",
+            "sub_label": "Extended pre-market trading (4:00 AM – 9:30 AM ET)",
             "et_time": now_et.strftime("%I:%M %p ET"),
-            "color": "amber",
+            "color": "cyan",
+            "polling_interval_seconds": 10,
         }
     elif 960 <= minute_of_day < 1200:
         return {
             "is_open": False,
+            "is_extended_hours": True,
+            "is_live": True,
             "session": "after_hours",
-            "label": "After-Hours Session",
-            "sub_label": "Closes at 8:00 PM ET",
+            "label": "After-Hours Live",
+            "sub_label": "Extended after-hours trading (4:00 PM – 8:00 PM ET)",
             "et_time": now_et.strftime("%I:%M %p ET"),
-            "color": "amber",
+            "color": "indigo",
+            "polling_interval_seconds": 10,
         }
     else:
         return {
             "is_open": False,
+            "is_extended_hours": False,
+            "is_live": False,
             "session": "closed",
             "label": "Market Closed",
             "sub_label": "Pre-market opens 4:00 AM ET",
@@ -215,18 +258,24 @@ POPULAR_TICKERS = [
 ]
 
 @app.get("/api/health")
-def health(simulate_open: bool = Query(False, description="Simulate live market open for off-hours testing")):
+def health(
+    simulate_open: bool = Query(False, description="Simulate live market open for off-hours testing"),
+    simulate_session: Optional[str] = Query(None, description="Simulate specific session ('pre_market', 'regular', 'after_hours')")
+):
     """
     Health check endpoint.
-    Used by the frontend to display live Alpaca connection and US Market status badges.
+    Used by the frontend to display live Alpaca connection and US Market status badges (including extended hours).
     """
+    sim_open = bool(simulate_open) if not hasattr(simulate_open, "default") else False
+    sim_session = str(simulate_session) if (simulate_session and not hasattr(simulate_session, "default")) else None
+
     return {
         "status": "healthy",
         "alpaca_configured": is_alpaca_configured(),
         "alpaca_base_url": get_alpaca_base_url(),
         "alpaca_data_url": get_alpaca_data_url(),
         "supported_models": ["ensemble", "gbdt", "ridge"],
-        "market_status": get_market_status(simulate_open=simulate_open),
+        "market_status": get_market_status(simulate_open=sim_open, simulate_session=sim_session),
     }
 
 @app.get("/api/search")

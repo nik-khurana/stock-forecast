@@ -20,6 +20,7 @@ let showSupportLine = true;             // Dynamic support level floor toggle st
 
 // Live 10-Second Market Streaming State
 let isMarketOpen = false;
+let currentMarketSession = "closed";
 let liveStreamTimer = null;
 let isLiveStreamingUpdating = false;
 const LIVE_STREAM_INTERVAL_MS = 10000;  // Exactly 10 seconds (6 requests/minute)
@@ -549,12 +550,15 @@ function fallbackCopyTextToClipboard(text) {
 
 /**
  * Checks backend health, Alpaca connection, and live US Market session status.
+ * Fully supports regular market hours, extended pre-market, and extended after-hours.
  */
 async function checkHealth() {
   try {
     const urlParams = new URLSearchParams(window.location.search);
     const isSimulateOpen = urlParams.get("simulate_open") === "true";
-    const res = await fetch(`/api/health${isSimulateOpen ? "?simulate_open=true" : ""}`);
+    const simSession = urlParams.get("simulate_session") || "";
+    const sessionQuery = simSession ? `&simulate_session=${encodeURIComponent(simSession)}` : "";
+    const res = await fetch(`/api/health?simulate_open=${isSimulateOpen}${sessionQuery}`);
     const data = await res.json();
     const statusText = document.getElementById("alpaca-status-text");
     const statusBadge = document.getElementById("alpaca-status-badge");
@@ -572,16 +576,23 @@ async function checkHealth() {
     // Live US Market Session Status Pill
     if (data.market_status) {
       const ms = data.market_status;
-      isMarketOpen = Boolean(ms.is_open);
+      isMarketOpen = Boolean(ms.is_live);
+      currentMarketSession = ms.session || (ms.is_open ? "regular" : "closed");
       const pill = document.getElementById("market-status-pill");
       const dot = document.getElementById("market-dot");
       const text = document.getElementById("market-status-text");
       if (pill && dot && text) {
         text.textContent = `${ms.label} (${ms.et_time})`;
         pill.title = ms.sub_label || ms.label;
-        if (ms.is_open) {
+        if (ms.session === "regular") {
           dot.className = "w-2 h-2 rounded-full bg-emerald-500 market-pulse-emerald";
           pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md";
+        } else if (ms.session === "pre_market") {
+          dot.className = "w-2 h-2 rounded-full bg-cyan-400 market-pulse-cyan";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 backdrop-blur-md";
+        } else if (ms.session === "after_hours") {
+          dot.className = "w-2 h-2 rounded-full bg-indigo-400 market-pulse-indigo";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 backdrop-blur-md";
         } else {
           dot.className = "w-2 h-2 rounded-full bg-amber-500 market-pulse-amber";
           pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
@@ -597,17 +608,32 @@ async function checkHealth() {
 
 /**
  * Synchronizes the 10-second live background streaming timer.
- * Automatically active whenever US markets are open and tab is focused.
+ * Automatically active whenever US markets (regular or extended hours) are open and tab is focused.
  */
 function syncLiveStreaming() {
   const isDocumentVisible = !document.hidden;
   const shouldStream = isMarketOpen && isDocumentVisible;
   const badge = document.getElementById("live-stream-badge");
+  const dot = document.getElementById("live-stream-dot");
 
   if (badge) {
     if (shouldStream) {
       badge.classList.remove("hidden");
       badge.classList.add("flex");
+      const labelSpan = badge.querySelector("span:not(#live-stream-dot)");
+      if (currentMarketSession === "pre_market") {
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 text-[11px] font-semibold backdrop-blur-md";
+        if (labelSpan) labelSpan.textContent = "10s Pre-Market Live";
+      } else if (currentMarketSession === "after_hours") {
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-indigo-400 animate-pulse";
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-semibold backdrop-blur-md";
+        if (labelSpan) labelSpan.textContent = "10s After-Hours Live";
+      } else {
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md";
+        if (labelSpan) labelSpan.textContent = "10s Live Sync";
+      }
     } else {
       badge.classList.add("hidden");
       badge.classList.remove("flex");
@@ -617,7 +643,7 @@ function syncLiveStreaming() {
   if (shouldStream) {
     if (!liveStreamTimer) {
       liveStreamTimer = setInterval(triggerLiveRefresh, LIVE_STREAM_INTERVAL_MS);
-      console.log(`[StockCast Live] Started 10s live updates (${1000 / (LIVE_STREAM_INTERVAL_MS / 1000)} req/min) for ${currentTicker}`);
+      console.log(`[StockCast Live] Started 10s live updates (${currentMarketSession}) for ${currentTicker}`);
     }
   } else {
     if (liveStreamTimer) {
@@ -779,6 +805,37 @@ function renderDashboard(data, isLiveUpdate = false) {
 
   const quote = data.quote;
   document.getElementById("current-price").textContent = `$${quote.price.toFixed(2)}`;
+
+  // Extended Session & Live Price Header Labeling
+  const sessionLabel = document.getElementById("price-session-label");
+  const sessionBadge = document.getElementById("price-session-badge");
+  const sessionType = (quote && quote.session) ? quote.session : currentMarketSession;
+
+  if (sessionLabel) {
+    if (sessionType === "pre_market") {
+      sessionLabel.textContent = "Pre-Market Price";
+    } else if (sessionType === "after_hours") {
+      sessionLabel.textContent = "After-Hours Price";
+    } else if (isMarketOpen || sessionType === "regular") {
+      sessionLabel.textContent = "Live Price";
+    } else {
+      sessionLabel.textContent = "Price at Close";
+    }
+  }
+
+  if (sessionBadge) {
+    if (sessionType === "pre_market") {
+      sessionBadge.textContent = "Pre-Mkt";
+      sessionBadge.className = "text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-cyan-500/10 text-cyan-500 border border-cyan-500/20";
+      sessionBadge.classList.remove("hidden");
+    } else if (sessionType === "after_hours") {
+      sessionBadge.textContent = "After-Hrs";
+      sessionBadge.className = "text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
+      sessionBadge.classList.remove("hidden");
+    } else {
+      sessionBadge.classList.add("hidden");
+    }
+  }
 
   const changePill = document.getElementById("change-pill");
   const changeIcon = document.getElementById("change-icon");
