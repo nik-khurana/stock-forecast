@@ -3,7 +3,7 @@
  *
  * Implements:
  * 1. Apple Glass UI Design with Light / Dark Mode Toggle & Persistence.
- * 2. 75% Historical / 25% Future Graph Proportional Balancing.
+ * 2. Guaranteed 75% Historical / 25% Prediction Horizontal Canvas Proportion across all timeframes.
  * 3. Dynamic Chart.js Rendering for 30-Day Daily and 3-Year Monthly Horizons.
  * 4. Technical Indicators and Out-of-Sample Backtesting Metrics.
  */
@@ -12,7 +12,7 @@
 let currentData = null;                 // Cached forecast payload from backend
 let currentTicker = "AAPL";             // Active stock ticker
 let selectedModel = "ensemble";         // Active model: 'ensemble', 'gbdt', or 'ridge'
-let selectedHistoryMode = "75_25";      // History window: '75_25' (default: 75% history / 25% forecast), 52, 104, 'all'
+let selectedHistoryWeeks = 104;         // Active history timeframe: 104 (default), 52, 26, or 'all'
 
 // Chart.js instances
 let forecastChart = null;
@@ -58,7 +58,7 @@ function initTheme() {
         lucide.createIcons();
       }
 
-      // Re-render charts with appropriate theme colors (grid lines, tick colors)
+      // Re-render charts with appropriate theme colors
       if (currentData) {
         updateModelView();
         renderMonthlyForecast(currentData.forecast_3y_monthly);
@@ -106,23 +106,22 @@ function initEventListeners() {
     });
   });
 
-  // Timeframe selector pills (75%/25%, 52W, 104W, All)
+  // Timeframe selector pills (104W, 52W, 26W, All)
   document.querySelectorAll(".timeframe-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".timeframe-tab").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
 
-      const modeVal = tab.getAttribute("data-weeks");
-      selectedHistoryMode = modeVal;
+      const weeksVal = tab.getAttribute("data-weeks");
+      selectedHistoryWeeks = weeksVal === "all" ? "all" : parseInt(weeksVal, 10);
 
-      // Update legend label
-      let legendText = "75% View";
-      if (modeVal === "75_25") legendText = "Past ~90 Days (75% View)";
-      else if (modeVal === "52") legendText = "Past 52 Weeks (1Y)";
-      else if (modeVal === "104") legendText = "Past 104 Weeks (2Y)";
-      else if (modeVal === "all") legendText = "All 3 Years";
+      let legendText = "104 Weeks (2Y)";
+      if (selectedHistoryWeeks === "all") legendText = "All 3 Years";
+      else if (selectedHistoryWeeks === 52) legendText = "52 Weeks (1Y)";
+      else if (selectedHistoryWeeks === 26) legendText = "26 Weeks (6M)";
+      else if (selectedHistoryWeeks === 104) legendText = "104 Weeks (2Y)";
 
-      document.getElementById("chart-history-legend").textContent = `Historical Close (${legendText})`;
+      document.getElementById("chart-history-legend").textContent = `Historical Close (${legendText} &bull; 75% Width)`;
 
       if (currentData) {
         const modelPayload = currentData.models_comparison[selectedModel] || currentData.models_comparison["ensemble"];
@@ -345,50 +344,53 @@ function updateModelView() {
 }
 
 /**
- * Renders the primary 30-Day Chart.
- * Proportional Balancing: Left ~75% is the old graph, right ~25% is the future predicted graph.
+ * Renders the primary 30-Day Chart with Guaranteed 75% History / 25% Prediction Proportion.
+ *
+ * For any selected historical window (26W, 52W, 104W, or All 3Y):
+ * - The left 75% of the chart width represents the historical price movement.
+ * - The right 25% of the chart width represents the 30-day forward prediction path & envelope.
+ * - The transition occurs at exact x = 75 with an indicator line.
  */
 function renderForecastChart(historical, dailyForecast) {
   const ctx = document.getElementById("forecastChart").getContext("2d");
   const dark = isDarkMode();
 
-  // -------------------------------------------------------------
-  // PROPORTION CALCULATION: 75% History / 25% Forecast
-  // -------------------------------------------------------------
-  // Future forecast = 30 trading days.
-  // For a 75% history / 25% future split: History = 30 * 3 = 90 sessions!
-  let sessionsToShow;
-  if (selectedHistoryMode === "75_25") {
-    sessionsToShow = 90; // Exactly 75% history (90) to 25% future (30)
-  } else if (selectedHistoryMode === "all") {
-    sessionsToShow = historical.length;
+  // 1. Slice historical bars according to selectedHistoryWeeks
+  let histSlice;
+  if (selectedHistoryWeeks === "all") {
+    histSlice = historical;
   } else {
-    const weeks = parseInt(selectedHistoryMode, 10) || 52;
-    sessionsToShow = Math.min(historical.length, weeks * 5);
+    const tradingSessions = selectedHistoryWeeks * 5;
+    histSlice = historical.slice(-tradingSessions);
   }
 
-  const recentHist = historical.slice(-sessionsToShow);
+  const nHist = histSlice.length;
+  const nPred = dailyForecast.length; // 30 points
 
-  const histLabels = recentHist.map((p) => p.date);
-  const histCloses = recentHist.map((p) => p.close);
+  // 2. Map coordinates:
+  // History: x in [0, 75]
+  const histPoints = histSlice.map((p, i) => ({
+    x: (75.0 * i) / Math.max(nHist - 1, 1),
+    y: p.close,
+    date: p.date,
+    seriesLabel: "Historical Close"
+  }));
 
-  const forecastLabels = dailyForecast.map((p) => p.date);
-  const allLabels = [...histLabels, ...forecastLabels];
+  const lastClose = histSlice[histSlice.length - 1].close;
+  const lastDate = histSlice[histSlice.length - 1].date;
 
-  const lastHistClose = histCloses[histCloses.length - 1];
+  // Prediction: x in [75, 100]
+  // The first point at x=75 connects directly to the last historical close
+  const meanPoints = [{ x: 75.0, y: lastClose, date: `${lastDate} (Transition)`, seriesLabel: "Predicted Mean Path" }];
+  const minPoints = [{ x: 75.0, y: lastClose, date: `${lastDate} (Transition)`, seriesLabel: "Predicted Min" }];
+  const maxPoints = [{ x: 75.0, y: lastClose, date: `${lastDate} (Transition)`, seriesLabel: "Predicted Max" }];
 
-  const histData = [...histCloses];
-  const meanData = new Array(histCloses.length - 1).fill(null);
-  meanData.push(lastHistClose);
-  dailyForecast.forEach((p) => meanData.push(p.mean));
-
-  const minData = new Array(histCloses.length - 1).fill(null);
-  minData.push(lastHistClose);
-  dailyForecast.forEach((p) => minData.push(p.min));
-
-  const maxData = new Array(histCloses.length - 1).fill(null);
-  maxData.push(lastHistClose);
-  dailyForecast.forEach((p) => maxData.push(p.max));
+  dailyForecast.forEach((p, j) => {
+    const xCoord = 75.0 + (25.0 * (j + 1)) / nPred;
+    meanPoints.push({ x: xCoord, y: p.mean, min: p.min, max: p.max, date: p.date, seriesLabel: "Predicted Mean Path" });
+    minPoints.push({ x: xCoord, y: p.min, date: p.date, seriesLabel: "Predicted Min (Lower Bound)" });
+    maxPoints.push({ x: xCoord, y: p.max, date: p.date, seriesLabel: "Predicted Max (Upper Bound)" });
+  });
 
   if (forecastChart) {
     forecastChart.destroy();
@@ -402,14 +404,42 @@ function renderForecastChart(historical, dailyForecast) {
   const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
+  // Custom Plugin: Draw vertical divider at x = 75 (Forecast Start)
+  const forecastDividerPlugin = {
+    id: "forecastDivider",
+    afterDraw: (chart) => {
+      const xScale = chart.scales.x;
+      const yScale = chart.scales.y;
+      if (!xScale || !yScale) return;
+
+      const xPixel = xScale.getPixelForValue(75.0);
+      const c = chart.ctx;
+      c.save();
+      c.beginPath();
+      c.setLineDash([4, 4]);
+      c.strokeStyle = dark ? "rgba(99, 102, 241, 0.5)" : "rgba(79, 70, 229, 0.4)";
+      c.lineWidth = 1.5;
+      c.moveTo(xPixel, yScale.top);
+      c.lineTo(xPixel, yScale.bottom);
+      c.stroke();
+
+      // Divider pill badge
+      c.fillStyle = dark ? "rgba(99, 102, 241, 0.85)" : "rgba(79, 70, 229, 0.85)";
+      c.font = "600 10px Inter, -apple-system, sans-serif";
+      c.textAlign = "center";
+      c.fillText("Forecast Start (30D)", xPixel, yScale.top + 14);
+      c.restore();
+    }
+  };
+
   forecastChart = new Chart(ctx, {
     type: "line",
+    plugins: [forecastDividerPlugin],
     data: {
-      labels: allLabels,
       datasets: [
         {
           label: "Historical Close",
-          data: histData,
+          data: histPoints,
           borderColor: "#06b6d4",
           borderWidth: 2,
           pointRadius: 0,
@@ -418,17 +448,17 @@ function renderForecastChart(historical, dailyForecast) {
         },
         {
           label: "Predicted Max (Upper Bound)",
-          data: maxData,
+          data: maxPoints,
           borderColor: "rgba(99, 102, 241, 0.35)",
           borderWidth: 1,
           pointRadius: 0,
           fill: "+1",
-          backgroundColor: dark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.08)",
+          backgroundColor: dark ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.08)",
           tension: 0.25,
         },
         {
           label: "Predicted Min (Lower Bound)",
-          data: minData,
+          data: minPoints,
           borderColor: "rgba(99, 102, 241, 0.35)",
           borderWidth: 1,
           pointRadius: 0,
@@ -437,7 +467,7 @@ function renderForecastChart(historical, dailyForecast) {
         },
         {
           label: "Predicted Mean Path",
-          data: meanData,
+          data: meanPoints,
           borderColor: "#6366f1",
           borderWidth: 2.5,
           borderDash: [5, 4],
@@ -451,7 +481,8 @@ function renderForecastChart(historical, dailyForecast) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: {
-        mode: "index",
+        mode: "nearest",
+        axis: "x",
         intersect: false,
       },
       plugins: {
@@ -468,21 +499,52 @@ function renderForecastChart(historical, dailyForecast) {
           boxPadding: 4,
           usePointStyle: true,
           callbacks: {
+            title: function (items) {
+              if (items.length > 0 && items[0].raw && items[0].raw.date) {
+                return items[0].raw.date;
+              }
+              return "";
+            },
             label: function (context) {
-              const val = context.parsed.y;
-              return val !== null ? `${context.dataset.label}: $${val.toFixed(2)}` : null;
+              const pt = context.raw;
+              if (!pt || pt.y === undefined) return null;
+              const label = pt.seriesLabel || context.dataset.label;
+              return `${label}: $${pt.y.toFixed(2)}`;
             },
           },
         },
       },
       scales: {
         x: {
+          type: "linear",
+          min: 0,
+          max: 100,
           grid: {
             color: gridColor,
           },
           ticks: {
             color: tickColor,
-            maxTicksLimit: 12,
+            stepSize: 12.5,
+            callback: function (val) {
+              if (Math.abs(val - 75.0) < 0.5) {
+                return "Today";
+              }
+              if (val < 75.0) {
+                const frac = val / 75.0;
+                const idx = Math.min(Math.round(frac * (nHist - 1)), nHist - 1);
+                if (idx >= 0 && histSlice[idx]) {
+                  // Format as YYYY-MM
+                  return histSlice[idx].date.substring(0, 7);
+                }
+              } else {
+                const fFrac = (val - 75.0) / 25.0;
+                const fIdx = Math.min(Math.round(fFrac * (nPred - 1)), nPred - 1);
+                if (fIdx >= 0 && dailyForecast[fIdx]) {
+                  return dailyForecast[fIdx].date.substring(5); // MM-DD
+                }
+              }
+              return "";
+            },
           },
         },
         y: {
