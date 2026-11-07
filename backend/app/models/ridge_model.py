@@ -56,7 +56,7 @@ class RidgeModel:
         data["target_return"] = np.log(data["close"] / data["close"].shift(1)).shift(-1)
         train_data = data.dropna(subset=["target_return"] + feature_cols).reset_index(drop=True)
 
-        if len(train_data) < 60:
+        if len(train_data) < 30:
             raise ValueError(f"Insufficient historical data ({len(train_data)} rows) for Ridge training.")
 
         X = train_data[feature_cols].values

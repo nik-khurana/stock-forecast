@@ -156,8 +156,8 @@ class AlpacaClient:
                 if not page_token or len(all_bars) >= 1200:
                     break
 
-            if not all_bars:
-                print(f"[AlpacaClient] No bars returned for {ticker}. Falling back to simulation.")
+            if not all_bars or len(all_bars) < 80:
+                print(f"[AlpacaClient] Insufficient bars ({len(all_bars) if all_bars else 0}) returned for {ticker}. Falling back to simulation.")
                 df = self._generate_simulated_bars(ticker, years=years)
                 return df, "demo_mode"
 

@@ -95,8 +95,14 @@ class GBDTModel:
         data["target_return"] = np.log(data["close"] / data["close"].shift(1)).shift(-1)
         train_data = data.dropna(subset=["target_return"] + feature_cols).reset_index(drop=True)
 
-        if len(train_data) < 60:
+        if len(train_data) < 30:
             raise ValueError(f"Insufficient historical data ({len(train_data)} rows) for ML training.")
+
+        # Dynamically adapt min_samples_leaf to available training size
+        leaf_size = min(10, max(2, len(train_data) // 6))
+        self.model_lower.set_params(min_samples_leaf=leaf_size)
+        self.model_median.set_params(min_samples_leaf=leaf_size)
+        self.model_upper.set_params(min_samples_leaf=leaf_size)
 
         X = train_data[feature_cols].values
         y = train_data["target_return"].values
