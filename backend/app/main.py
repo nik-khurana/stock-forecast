@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from pathlib import Path
 
 from backend.app.config import (
@@ -188,6 +189,47 @@ def get_forecast(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Forecasting calculation failed for symbol {clean_ticker}."
         )
+
+# -------------------------------------------------------------
+# Portfolio / Owned Stocks Forecasting Models & Endpoint
+# -------------------------------------------------------------
+class HoldingItem(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=50, description="Stock ticker symbol or company name")
+    shares: float = Field(..., gt=0, le=1_000_000_000, description="Number of shares owned")
+    buy_price: float = Field(..., gt=0, le=100_000_000, description="Purchase price per share in USD")
+
+class PortfolioRequest(BaseModel):
+    holdings: List[HoldingItem] = Field(..., min_length=1, max_length=50, description="List of owned stock positions")
+    days: int = Field(60, ge=5, le=180, description="Forward forecast horizon in business days (default 60)")
+    model: str = Field("ensemble", description="Model choice: ensemble, gbdt, or ridge")
+
+@app.post("/api/portfolio/forecast")
+def get_portfolio_forecast(req: PortfolioRequest, request: Request):
+    """
+    Master Portfolio Forecasting endpoint.
+    Computes aggregated 60-day daily Min/Median/Max investment values and 3-year
+    monthly trajectory for the user's personal owned holdings.
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    enforce_rate_limit(client_ip)
+
+    try:
+        holdings_dicts = [h.model_dump() for h in req.holdings]
+        result = forecast_service.generate_portfolio_forecast(
+            holdings=holdings_dicts,
+            n_days=req.days,
+            selected_model=req.model
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as exc:
+        logger.error("Error generating portfolio forecast: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Portfolio forecasting calculation failed. Please check ticker symbols and try again."
+        )
+
 
 # -------------------------------------------------------------
 # Static File & Frontend Dashboard Mounting

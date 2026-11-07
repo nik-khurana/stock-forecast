@@ -46,10 +46,11 @@ class RidgeModel:
         df_features: pd.DataFrame,
         feature_cols: List[str],
         current_price: float,
-        last_date: pd.Timestamp
+        last_date: pd.Timestamp,
+        n_days: int = 30
     ) -> Dict[str, Any]:
         """
-        Trains Ridge on historical technical indicators and projects 30 trading days forward.
+        Trains Ridge on historical technical indicators and projects n_days trading days forward.
         """
         data = df_features.copy()
         data["target_return"] = np.log(data["close"] / data["close"].shift(1)).shift(-1)
@@ -74,10 +75,10 @@ class RidgeModel:
         residual_std = max(float(np.std(residuals)), 0.012)
 
         # -------------------------------------------------------------
-        # 2. Multi-Step Projection Loop (30 Business Days)
+        # 2. Multi-Step Projection Loop (n_days Business Days)
         # -------------------------------------------------------------
         last_features = X[-1:].copy()
-        pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq="B")
+        pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq="B")
 
         daily_points = []
         p_mean = current_price
@@ -91,8 +92,8 @@ class RidgeModel:
             scaled_feat = self.scaler.transform(last_features)
             r_pred = float(self.model.predict(scaled_feat)[0])
 
-            # Apply momentum decay dampening over the 30-day forward horizon
-            dampening = np.exp(-0.05 * step_i)
+            # Apply momentum decay dampening over the forward horizon
+            dampening = np.exp(-0.035 * step_i)
             r_pred = np.clip(r_pred * dampening, -0.020, 0.020)
 
             # Uncertainty expands as sqrt of the forecast step (diffusion process)
@@ -112,7 +113,7 @@ class RidgeModel:
             last_features[0, 0] = r_pred
 
         # -------------------------------------------------------------
-        # 3. 30-Day Aggregated Metrics
+        # 3. Horizon Aggregated Metrics
         # -------------------------------------------------------------
         all_means = [p["mean"] for p in daily_points]
         all_mins = [p["min"] for p in daily_points]
@@ -123,14 +124,29 @@ class RidgeModel:
         overall_max = round(float(max(all_maxs)), 2)
         pct_change = round(((all_means[-1] - current_price) / current_price) * 100, 2)
 
+        summary_metrics = {
+            "current_price": round(current_price, 2),
+            "predicted_mean": overall_mean,
+            "predicted_min": overall_min,
+            "predicted_max": overall_max,
+            "expected_return_pct": pct_change,
+        }
+
         return {
             "model_name": "Ridge Regression (L2 Regularized)",
             "daily_forecast": daily_points,
-            "summary_30d": {
-                "current_price": round(current_price, 2),
-                "predicted_mean": overall_mean,
-                "predicted_min": overall_min,
-                "predicted_max": overall_max,
-                "expected_return_pct": pct_change,
-            }
+            "summary_30d": summary_metrics,
+            "summary": summary_metrics,
         }
+
+    def fit_and_predict(
+        self,
+        df_features: pd.DataFrame,
+        feature_cols: List[str],
+        current_price: float,
+        last_date: pd.Timestamp,
+        n_days: int = 30
+    ) -> Dict[str, Any]:
+        """Alias for fit_and_predict_30d supporting arbitrary n_days."""
+        return self.fit_and_predict_30d(df_features, feature_cols, current_price, last_date, n_days=n_days)
+

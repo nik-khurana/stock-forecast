@@ -14,8 +14,10 @@ This service serves as the core coordinator between:
 """
 
 import time
+import numpy as np
 import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor
 
 from backend.app.alpaca_client import AlpacaClient
 from backend.app.feature_builder import FeatureBuilder
@@ -24,7 +26,7 @@ from backend.app.models.ridge_model import RidgeModel
 from backend.app.models.ensemble import EnsembleModel
 from backend.app.models.long_term_model import LongTermMonthlyModel
 from backend.app.backtester import Backtester
-from backend.app.company_database import get_company_name
+from backend.app.company_database import get_company_name, resolve_ticker
 
 class ForecastService:
     """
@@ -246,3 +248,259 @@ class ForecastService:
             "divergence_pct": divergence_pct,
             "divergence_note": divergence_note
         }
+
+    def generate_portfolio_forecast(
+        self,
+        holdings: List[Dict[str, Any]],
+        n_days: int = 60,
+        selected_model: str = "ensemble"
+    ) -> Dict[str, Any]:
+        """
+        Calculates an aggregate multi-stock investment forecast for owned holdings.
+
+        Computes:
+        1. Current portfolio value vs total cost basis (Profit/Loss).
+        2. Daily aggregate portfolio Min, Median (Mean), and Max trajectory for next n_days (e.g. 60 days).
+        3. Monthly aggregate portfolio Min, Median (Mean), and Max trajectory for next 36 months (3 years).
+        4. Per-holding breakdown with individual performance and portfolio weighting.
+
+        Parameters:
+            holdings: List of dicts with 'ticker', 'shares', and 'buy_price'.
+            n_days: Forecast forward horizon in business days (default 60).
+            selected_model: 'ensemble', 'gbdt', or 'ridge'.
+        """
+        t0 = time.time()
+
+        # Step 1: Normalize and aggregate duplicate holdings
+        agg_holdings: Dict[str, Dict[str, float]] = {}
+        for h in holdings:
+            raw_sym = str(h.get("ticker", "")).strip()
+            resolved = resolve_ticker(raw_sym)
+            try:
+                shares = float(h.get("shares", 0.0))
+                buy_price = float(h.get("buy_price", 0.0))
+            except (ValueError, TypeError):
+                continue
+
+            if shares <= 0 or buy_price <= 0:
+                continue
+
+            if resolved not in agg_holdings:
+                agg_holdings[resolved] = {"shares": shares, "total_cost": shares * buy_price}
+            else:
+                agg_holdings[resolved]["shares"] += shares
+                agg_holdings[resolved]["total_cost"] += shares * buy_price
+
+        if not agg_holdings:
+            raise ValueError("No valid holdings with positive shares and purchase price provided.")
+
+        normalized_holdings = []
+        for sym, data in agg_holdings.items():
+            avg_price = data["total_cost"] / data["shares"]
+            normalized_holdings.append({
+                "ticker": sym,
+                "company_name": get_company_name(sym),
+                "shares": round(data["shares"], 4),
+                "buy_price": round(avg_price, 2),
+                "cost_basis": round(data["total_cost"], 2),
+            })
+
+        unique_tickers = [h["ticker"] for h in normalized_holdings]
+
+        # Step 2: Concurrently fetch stock bundles (3Y daily bars + latest live quote)
+        bundles: Dict[str, Any] = {}
+        def _fetch_bundle(tk: str):
+            return tk, self.alpaca_client.get_stock_bundle(tk, years=3)
+
+        with ThreadPoolExecutor(max_workers=min(len(unique_tickers), 8)) as executor:
+            for tk, bundle in executor.map(_fetch_bundle, unique_tickers):
+                bundles[tk] = bundle
+
+        # Step 3: Run ML models for each holding
+        stock_daily_forecasts: Dict[str, List[Dict[str, Any]]] = {}
+        stock_monthly_forecasts: Dict[str, List[Dict[str, Any]]] = {}
+        current_quotes: Dict[str, Any] = {}
+
+        for tk in unique_tickers:
+            b = bundles[tk]
+            bars_df = b["bars_df"]
+            quote = b["quote"]
+            current_price = quote["price"]
+            current_quotes[tk] = quote
+            last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
+
+            feat_df, feature_cols = self.feature_builder.build_features(bars_df)
+
+            gbdt = GBDTModel()
+            gbdt_res = gbdt.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
+
+            ridge = RidgeModel(alpha=2.5)
+            ridge_res = ridge.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
+
+            ensemble_res = EnsembleModel.blend(gbdt_res, ridge_res)
+
+            if selected_model == "gbdt":
+                chosen = gbdt_res
+            elif selected_model == "ridge":
+                chosen = ridge_res
+            else:
+                chosen = ensemble_res
+
+            stock_daily_forecasts[tk] = chosen["daily_forecast"]
+            m_res = self.long_term_model.predict_36_months(bars_df, current_price, last_date)
+            stock_monthly_forecasts[tk] = m_res["monthly_forecast"]
+
+        # Step 4: Calculate portfolio breakdown and aggregate totals
+        total_cost_basis = sum(h["cost_basis"] for h in normalized_holdings)
+        current_portfolio_value = 0.0
+
+        holdings_breakdown = []
+        for h in normalized_holdings:
+            tk = h["ticker"]
+            curr_p = current_quotes[tk]["price"]
+            curr_val = round(h["shares"] * curr_p, 2)
+            current_portfolio_value += curr_val
+
+            pnl = round(curr_val - h["cost_basis"], 2)
+            pnl_pct = round((pnl / h["cost_basis"] * 100) if h["cost_basis"] > 0 else 0.0, 2)
+
+            end_p_60d = stock_daily_forecasts[tk][-1]["mean"]
+            ret_60d_pct = round(((end_p_60d - curr_p) / curr_p) * 100, 2)
+
+            end_p_3y = stock_monthly_forecasts[tk][-1]["mean"]
+            ret_3y_pct = round(((end_p_3y - curr_p) / curr_p) * 100, 2)
+
+            holdings_breakdown.append({
+                "ticker": tk,
+                "company_name": h["company_name"],
+                "shares": h["shares"],
+                "buy_price": h["buy_price"],
+                "cost_basis": h["cost_basis"],
+                "current_price": round(curr_p, 2),
+                "current_value": curr_val,
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                "forecast_60d_price": round(end_p_60d, 2),
+                "forecast_60d_return_pct": ret_60d_pct,
+                "forecast_3y_target": round(end_p_3y, 2),
+                "forecast_3y_return_pct": ret_3y_pct,
+            })
+
+        current_portfolio_value = round(current_portfolio_value, 2)
+        total_pnl = round(current_portfolio_value - total_cost_basis, 2)
+        total_pnl_pct = round((total_pnl / total_cost_basis * 100) if total_cost_basis > 0 else 0.0, 2)
+
+        for item in holdings_breakdown:
+            item["weight_pct"] = round(
+                (item["current_value"] / current_portfolio_value * 100) if current_portfolio_value > 0 else 0.0,
+                1
+            )
+
+        # Sort holdings by current value descending
+        holdings_breakdown.sort(key=lambda x: x["current_value"], reverse=True)
+
+        # Step 5: Daily Aggregate Portfolio Forecast (e.g. 60 Days)
+        portfolio_60d_daily = []
+        ref_tk = unique_tickers[0]
+        actual_days = len(stock_daily_forecasts[ref_tk])
+
+        for day_idx in range(actual_days):
+            dt_str = stock_daily_forecasts[ref_tk][day_idx]["date"]
+            day_mean = 0.0
+            day_min = 0.0
+            day_max = 0.0
+
+            for h in normalized_holdings:
+                tk = h["ticker"]
+                pt = stock_daily_forecasts[tk][day_idx]
+                day_mean += h["shares"] * pt["mean"]
+                day_min += h["shares"] * pt["min"]
+                day_max += h["shares"] * pt["max"]
+
+            portfolio_60d_daily.append({
+                "day_index": day_idx + 1,
+                "date": dt_str,
+                "mean": round(day_mean, 2),
+                "min": round(day_min, 2),
+                "max": round(day_max, 2),
+            })
+
+        min_60d = min(p["min"] for p in portfolio_60d_daily)
+        max_60d = max(p["max"] for p in portfolio_60d_daily)
+        mean_60d = round(float(np.mean([p["mean"] for p in portfolio_60d_daily])), 2)
+        end_60d = portfolio_60d_daily[-1]["mean"]
+
+        exp_roi_60d = round(
+            ((end_60d - current_portfolio_value) / current_portfolio_value * 100) if current_portfolio_value > 0 else 0.0,
+            2
+        )
+        exp_profit_60d = round(end_60d - current_portfolio_value, 2)
+        total_proj_pnl_60d = round(end_60d - total_cost_basis, 2)
+        total_proj_pnl_60d_pct = round(
+            ((end_60d - total_cost_basis) / total_cost_basis * 100) if total_cost_basis > 0 else 0.0,
+            2
+        )
+
+        # Step 6: Monthly Aggregate Portfolio Forecast (36 Months / 3 Years)
+        portfolio_3y_monthly = []
+        for m_idx in range(36):
+            ym = stock_monthly_forecasts[ref_tk][m_idx]["year_month"]
+            m_mean = 0.0
+            m_min = 0.0
+            m_max = 0.0
+
+            for h in normalized_holdings:
+                tk = h["ticker"]
+                m_pt = stock_monthly_forecasts[tk][m_idx]
+                m_mean += h["shares"] * m_pt["mean"]
+                m_min += h["shares"] * m_pt["min"]
+                m_max += h["shares"] * m_pt["max"]
+
+            portfolio_3y_monthly.append({
+                "month_index": m_idx + 1,
+                "year_month": ym,
+                "mean": round(m_mean, 2),
+                "min": round(m_min, 2),
+                "max": round(m_max, 2),
+            })
+
+        y1_end = portfolio_3y_monthly[11]["mean"]
+        y2_end = portfolio_3y_monthly[23]["mean"]
+        y3_end = portfolio_3y_monthly[35]["mean"]
+        cagr_3y = round(
+            (((y3_end / (current_portfolio_value + 1e-9)) ** (1.0 / 3.0)) - 1.0) * 100,
+            2
+        )
+
+        execution_time_ms = round((time.time() - t0) * 1000, 1)
+
+        return {
+            "total_cost_basis": total_cost_basis,
+            "current_portfolio_value": current_portfolio_value,
+            "total_unrealized_pnl": total_pnl,
+            "total_unrealized_pnl_pct": total_pnl_pct,
+            "num_holdings": len(holdings_breakdown),
+            "selected_model": selected_model,
+            "execution_time_ms": execution_time_ms,
+            "holdings_breakdown": holdings_breakdown,
+            "portfolio_60d_daily": portfolio_60d_daily,
+            "portfolio_60d_summary": {
+                "current_value": current_portfolio_value,
+                "predicted_min": min_60d,
+                "predicted_mean": mean_60d,
+                "predicted_max": max_60d,
+                "end_value": end_60d,
+                "expected_roi_60d_pct": exp_roi_60d,
+                "expected_profit_60d": exp_profit_60d,
+                "total_projected_pnl_60d": total_proj_pnl_60d,
+                "total_projected_pnl_60d_pct": total_proj_pnl_60d_pct,
+            },
+            "portfolio_3y_monthly": portfolio_3y_monthly,
+            "portfolio_3y_summary": {
+                "year_1_end_value": y1_end,
+                "year_2_end_value": y2_end,
+                "year_3_end_value": y3_end,
+                "cagr_3y_pct": cagr_3y,
+            }
+        }
+

@@ -63,14 +63,17 @@ class EnsembleModel:
         overall_max = round(float(max(all_maxs)), 2)
         pct_change = round(((all_means[-1] - current_price) / current_price) * 100, 2)
 
+        summary_metrics = {
+            "current_price": current_price,
+            "predicted_mean": overall_mean,
+            "predicted_min": overall_min,
+            "predicted_max": overall_max,
+            "expected_return_pct": pct_change,
+        }
+
         return {
             "model_name": "Blended Ensemble (GBDT + Ridge)",
             "daily_forecast": blended_daily,
-            "summary_30d": {
-                "current_price": current_price,
-                "predicted_mean": overall_mean,
-                "predicted_min": overall_min,
-                "predicted_max": overall_max,
-                "expected_return_pct": pct_change,
-            }
+            "summary_30d": summary_metrics,
+            "summary": summary_metrics,
         }

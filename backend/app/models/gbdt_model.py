@@ -65,22 +65,24 @@ class GBDTModel:
         df_features: pd.DataFrame,
         feature_cols: List[str],
         current_price: float,
-        last_date: pd.Timestamp
+        last_date: pd.Timestamp,
+        n_days: int = 30
     ) -> Dict[str, Any]:
         """
-        Trains quantile models on historical technical indicators and projects 30 trading days forward.
+        Trains quantile models on historical technical indicators and projects n_days trading days forward.
         
         Parameters:
             df_features: DataFrame with engineered technical features (RSI, MACD, etc.).
             feature_cols: List of column names to train on.
             current_price: The latest live market price of the stock.
             last_date: Timestamp of the most recent historical bar.
+            n_days: Forward business days to forecast (default 30).
             
         Returns:
             Dictionary containing:
             - 'model_name': Identifier string
-            - 'daily_forecast': List of 30 daily {date, mean, min, max} predictions
-            - 'summary_30d': Aggregated 30-day Min, Mean, Max, and expected return %
+            - 'daily_forecast': List of n_days daily {date, mean, min, max} predictions
+            - 'summary_30d' & 'summary': Aggregated Min, Mean, Max, and expected return %
         """
         self.feature_cols = feature_cols
         data = df_features.copy()
@@ -110,10 +112,10 @@ class GBDTModel:
         self.model_upper.fit(X_scaled, y)
 
         # -------------------------------------------------------------
-        # 3. Multi-Step Forward Recursive Prediction Loop (30 Business Days)
+        # 3. Multi-Step Forward Recursive Prediction Loop (n_days Business Days)
         # -------------------------------------------------------------
         last_features = X[-1:].copy()
-        pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq="B")
+        pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq="B")
 
         daily_points = []
         p_mean = current_price
@@ -135,7 +137,7 @@ class GBDTModel:
             # In financial time series, extreme daily return predictions quickly compound into
             # unrealistic multi-week divergences. We apply exponential mean-reversion dampening:
             # Short-term momentum fades gracefully towards the long-term trend as the horizon expands.
-            dampening = np.exp(-0.06 * step_i)
+            dampening = np.exp(-0.035 * step_i)
             r_median = np.clip(r_median * dampening, -0.025, 0.025)
             r_lower = np.clip(r_lower * dampening, -0.040, 0.010)
             r_upper = np.clip(r_upper * dampening, -0.010, 0.040)
@@ -166,7 +168,7 @@ class GBDTModel:
             last_features[0, 0] = r_median
 
         # -------------------------------------------------------------
-        # 4. Compute 30-Day Aggregated Summary Metrics
+        # 4. Compute Horizon Aggregated Summary Metrics
         # -------------------------------------------------------------
         all_means = [p["mean"] for p in daily_points]
         all_mins = [p["min"] for p in daily_points]
@@ -177,14 +179,29 @@ class GBDTModel:
         overall_max = round(float(max(all_maxs)), 2)
         pct_change = round(((all_means[-1] - current_price) / current_price) * 100, 2)
 
+        summary_metrics = {
+            "current_price": round(current_price, 2),
+            "predicted_mean": overall_mean,
+            "predicted_min": overall_min,
+            "predicted_max": overall_max,
+            "expected_return_pct": pct_change,
+        }
+
         return {
             "model_name": "Gradient Boosted Trees (GBDT)",
             "daily_forecast": daily_points,
-            "summary_30d": {
-                "current_price": round(current_price, 2),
-                "predicted_mean": overall_mean,
-                "predicted_min": overall_min,
-                "predicted_max": overall_max,
-                "expected_return_pct": pct_change,
-            }
+            "summary_30d": summary_metrics,
+            "summary": summary_metrics,
         }
+
+    def fit_and_predict(
+        self,
+        df_features: pd.DataFrame,
+        feature_cols: List[str],
+        current_price: float,
+        last_date: pd.Timestamp,
+        n_days: int = 30
+    ) -> Dict[str, Any]:
+        """Alias for fit_and_predict_30d supporting arbitrary n_days."""
+        return self.fit_and_predict_30d(df_features, feature_cols, current_price, last_date, n_days=n_days)
+
