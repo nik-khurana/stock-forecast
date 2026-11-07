@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockCast ML - Owned Stocks Portfolio Forecast</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            midnight: '#000000',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Custom Apple Glass Styles -->
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="antialiased min-h-screen">
+
+  <!-- Top Apple Glass Navigation Header -->
+  <header class="sticky top-0 z-40 w-full apple-glass border-b border-black/[0.06] dark:border-white/[0.08]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Left: Back Button & Title -->
+      <div class="flex items-center space-x-3 sm:space-x-4">
+        <!-- Back Button to Home Page -->
+        <a
+          href="/"
+          class="flex items-center space-x-2 px-3 py-1.5 rounded-full apple-glass text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] shadow-sm transition group"
+        >
+          <i data-lucide="arrow-left" class="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition"></i>
+          <span>Back to Single Stock Forecast</span>
+        </a>
+
+        <div class="h-4 w-px bg-black/[0.08] dark:bg-white/[0.12] hidden md:block"></div>
+
+        <div class="hidden md:flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+            <i data-lucide="briefcase" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <span class="text-sm font-bold text-slate-900 dark:text-white">Owned Stocks Forecast</span>
+            <span id="vault-security-pill" class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+              Local Encrypted Cache
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Header Actions: Privacy Mask + Recalculate + Theme Toggle -->
+      <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        <!-- Privacy Shield Mask Button -->
+        <button
+          id="vault-privacy-toggle"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+          title="Toggle Privacy Mask (Hide Balances)"
+        >
+          <i id="privacy-icon" data-lucide="eye" class="w-3.5 h-3.5"></i>
+          <span class="text-[11px] font-medium hidden sm:inline">Privacy Mask</span>
+        </button>
+
+        <!-- Recalculate Forecast Button -->
+        <button
+          id="portfolio-recalc-btn"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+          title="Recalculate Projections"
+        >
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span class="text-[11px] font-medium hidden sm:inline">Recalculate</span>
+        </button>
+
+        <!-- Light / Dark Mode Toggle Button -->
+        <button
+          id="theme-toggle-btn"
+          aria-label="Toggle theme"
+          class="w-9 h-9 rounded-full flex items-center justify-center border border-black/[0.08] dark:border-white/[0.12] bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 transition-all shadow-sm"
+        >
+          <i id="theme-toggle-icon" data-lucide="moon" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Full-Page Portfolio Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Hero Title & Info Banner -->
+    <section class="space-y-2">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center space-x-3">
+            <span>My Investment Portfolio</span>
+          </h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Aggregate Machine Learning Projections for Next 60 Days and 3-Year Monthly Growth &bull; Stored 100% locally on your device
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-2 text-xs font-mono text-slate-400">
+          <i data-lucide="shield" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span id="portfolio-last-updated">Local cache active</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Add Position Card -->
+    <section class="p-5 sm:p-6 rounded-3xl apple-glass space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-indigo-500"></i>
+          <span>Add Stock Position</span>
+        </h2>
+        <button id="load-sample-portfolio-btn" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">
+          Load Sample Portfolio (AAPL, NVDA, MSFT, TSLA)
+        </button>
+      </div>
+
+      <form id="add-holding-form" class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+        <!-- Stock / Company Input with Autocomplete -->
+        <div class="relative sm:col-span-6">
+          <input
+            type="text"
+            id="portfolio-ticker-input"
+            autocomplete="off"
+            placeholder="Search stock ticker or company name (e.g. Apple, NVDA, TSLA)..."
+            class="w-full px-4 py-3 rounded-2xl apple-glass text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            required
+          />
+          <div id="portfolio-autocomplete-dropdown" class="hidden absolute top-full left-0 right-0 mt-1 p-1 apple-glass rounded-2xl shadow-2xl max-h-60 overflow-y-auto z-50 divide-y divide-black/[0.04] dark:divide-white/[0.06]"></div>
+        </div>
+
+        <!-- Shares Owned -->
+        <div class="sm:col-span-3">
+          <input
+            type="number"
+            id="portfolio-shares-input"
+            step="any"
+            min="0.0001"
+            placeholder="Shares owned (e.g. 15)"
+            class="w-full px-4 py-3 rounded-2xl apple-glass text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            required
+          />
+        </div>
+
+        <!-- Purchase Price ($) -->
+        <div class="sm:col-span-3 flex items-center space-x-2">
+          <input
+            type="number"
+            id="portfolio-price-input"
+            step="any"
+            min="0.01"
+            placeholder="Purchase Price ($)"
+            class="w-full px-4 py-3 rounded-2xl apple-glass text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            required
+          />
+          <button
+            type="submit"
+            class="px-5 py-3 rounded-2xl apple-glass-btn text-xs font-semibold whitespace-nowrap"
+          >
+            Add
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Portfolio KPI Summary Cards (4 Cards) -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Total Cost Basis -->
+      <div class="p-6 rounded-3xl apple-glass space-y-2">
+        <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          Total Invested (Cost Basis)
+        </div>
+        <div id="portfolio-cost-basis" class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight privacy-value">
+          $0.00
+        </div>
+        <div class="text-xs text-slate-400 font-medium">Cumulative cost of all positions</div>
+      </div>
+
+      <!-- Current Portfolio Value & P&L -->
+      <div class="p-6 rounded-3xl apple-glass space-y-2">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          <span>Current Portfolio Value</span>
+          <span id="portfolio-pnl-pill" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-500/10 text-slate-500">
+            0.00%
+          </span>
+        </div>
+        <div id="portfolio-current-value" class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight privacy-value">
+          $0.00
+        </div>
+        <div id="portfolio-pnl-dollar" class="text-xs font-semibold text-slate-500 dark:text-slate-400 privacy-value">
+          +$0.00 Unrealized P&L
+        </div>
+      </div>
+
+      <!-- 60-Day Expected Value & ROI -->
+      <div class="p-6 rounded-3xl apple-glass space-y-2">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          <span>60-Day Expected Value</span>
+          <span id="portfolio-60d-roi" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/10 text-indigo-500">
+            +0.00%
+          </span>
+        </div>
+        <div id="portfolio-60d-mean" class="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 tracking-tight privacy-value">
+          $0.00
+        </div>
+        <div id="portfolio-60d-profit" class="text-xs text-slate-500 dark:text-slate-400 font-medium privacy-value">
+          +$0.00 Expected gain
+        </div>
+      </div>
+
+      <!-- 60-Day Range Bounds -->
+      <div class="p-6 rounded-3xl apple-glass space-y-2">
+        <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          60-Day Volatility Band
+        </div>
+        <div class="flex items-baseline space-x-1.5 text-2xl font-bold">
+          <span id="portfolio-60d-min" class="text-rose-500 dark:text-rose-400 privacy-value">$0</span>
+          <span class="text-slate-400 text-sm">to</span>
+          <span id="portfolio-60d-max" class="text-emerald-500 dark:text-emerald-400 privacy-value">$0</span>
+        </div>
+        <div class="text-xs text-slate-400 font-medium">90% confidence envelope</div>
+      </div>
+    </section>
+
+    <!-- Active Positions Table -->
+    <section class="rounded-3xl apple-glass overflow-hidden border border-black/[0.06] dark:border-white/[0.08]">
+      <div class="p-5 bg-black/[0.02] dark:bg-white/[0.02] border-b border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center space-x-2">
+          <i data-lucide="layers" class="w-4 h-4 text-indigo-500"></i>
+          <span>Active Stock Positions (<span id="portfolio-positions-count">0</span>)</span>
+        </h3>
+        <button id="clear-all-holdings-btn" class="text-xs text-rose-500 hover:text-rose-600 font-medium">
+          Clear All Positions
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-black/[0.03] dark:bg-white/[0.04] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
+            <tr>
+              <th class="py-3 px-5">Symbol</th>
+              <th class="py-3 px-4 text-right">Shares</th>
+              <th class="py-3 px-4 text-right">Buy Price</th>
+              <th class="py-3 px-4 text-right">Live Price</th>
+              <th class="py-3 px-4 text-right">Cost Basis</th>
+              <th class="py-3 px-4 text-right">Current Value</th>
+              <th class="py-3 px-4 text-right">Unrealized P&L</th>
+              <th class="py-3 px-4 text-right">Portfolio Weight</th>
+              <th class="py-3 px-4 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="portfolio-holdings-tbody" class="divide-y divide-black/[0.04] dark:divide-white/[0.06] font-mono">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 60-Day Investment Forecast Chart Section -->
+    <section class="p-6 rounded-3xl apple-glass space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="trending-up" class="w-4 h-4 text-indigo-500"></i>
+            <span>Total Investment 60-Day Forecast Path</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Composite expected median path across all owned stocks with shaded Min (bearish) & Max (bullish) envelopes.
+          </p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button id="toggle-portfolio-daily-btn" class="text-xs px-3.5 py-1.5 rounded-xl apple-glass text-indigo-600 dark:text-indigo-400 font-semibold">
+            View Daily Table
+          </button>
+          <button id="export-portfolio-60d-csv" class="text-xs px-3.5 py-1.5 rounded-xl apple-glass text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 font-semibold flex items-center space-x-1.5">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Export CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="relative h-[380px] w-full">
+        <canvas id="portfolio60dChart"></canvas>
+      </div>
+
+      <!-- Collapsible 60-Day Daily Table -->
+      <div id="portfolio-daily-table-container" class="hidden pt-4 border-t border-black/[0.06] dark:border-white/[0.08] max-h-72 overflow-y-auto">
+        <table class="w-full text-left text-xs font-mono">
+          <thead class="bg-black/[0.03] dark:bg-white/[0.04] text-slate-400 sticky top-0 uppercase tracking-wider font-semibold">
+            <tr>
+              <th class="py-2.5 px-4">Day</th>
+              <th class="py-2.5 px-4">Date</th>
+              <th class="py-2.5 px-4 text-right">Min Value</th>
+              <th class="py-2.5 px-4 text-right">Expected Median</th>
+              <th class="py-2.5 px-4 text-right">Max Value</th>
+              <th class="py-2.5 px-4 text-right">Projected Gain</th>
+            </tr>
+          </thead>
+          <tbody id="portfolio-daily-tbody" class="divide-y divide-black/[0.03] dark:divide-white/[0.05]"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3-Year Monthly Multi-Year Horizon Section -->
+    <section class="p-6 rounded-3xl apple-glass space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="calendar" class="w-4 h-4 text-indigo-500"></i>
+            <span>3-Year Multi-Year Horizon (36 Forward Months)</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Resampled exponential trend drift and geometric volatility cones for all owned assets.
+          </p>
+        </div>
+        <button id="export-portfolio-3y-csv" class="text-xs px-3.5 py-1.5 rounded-xl apple-glass text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 font-semibold flex items-center space-x-1.5">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>Export 3Y CSV</span>
+        </button>
+      </div>
+
+      <!-- 3-Year Milestones (4 Cards) -->
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase">Year 1 Target</div>
+          <div id="portfolio-y1-val" class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 privacy-value">$0.00</div>
+          <div class="text-[11px] text-slate-500">12 Months Out</div>
+        </div>
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase">Year 2 Target</div>
+          <div id="portfolio-y2-val" class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 privacy-value">$0.00</div>
+          <div class="text-[11px] text-slate-500">24 Months Out</div>
+        </div>
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase">Year 3 Target</div>
+          <div id="portfolio-y3-val" class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 privacy-value">$0.00</div>
+          <div class="text-[11px] text-slate-500">36 Months Out</div>
+        </div>
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase">Projected 3-Year CAGR</div>
+          <div id="portfolio-cagr" class="text-2xl font-extrabold text-emerald-500">+0.00%</div>
+          <div class="text-[11px] text-slate-500">Compound Annual Growth</div>
+        </div>
+      </div>
+
+      <!-- 3-Year Chart Canvas -->
+      <div class="relative h-[380px] w-full">
+        <canvas id="portfolio3yChart"></canvas>
+      </div>
+
+      <!-- 36-Month Detailed Table -->
+      <div class="pt-4 border-t border-black/[0.06] dark:border-white/[0.08] max-h-72 overflow-y-auto">
+        <table class="w-full text-left text-xs font-mono">
+          <thead class="bg-black/[0.03] dark:bg-white/[0.04] text-slate-400 sticky top-0 uppercase tracking-wider font-semibold">
+            <tr>
+              <th class="py-2.5 px-4">Month</th>
+              <th class="py-2.5 px-4">Period</th>
+              <th class="py-2.5 px-4 text-right">Predicted Min</th>
+              <th class="py-2.5 px-4 text-right">Expected Mean</th>
+              <th class="py-2.5 px-4 text-right">Predicted Max</th>
+            </tr>
+          </thead>
+          <tbody id="portfolio-monthly-tbody" class="divide-y divide-black/[0.03] dark:divide-white/[0.05]"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Security, Privacy & Local Vault Settings -->
+    <section class="p-6 rounded-3xl apple-glass space-y-6">
+      <div class="pb-3 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+          <span>Security, Privacy & Local Browser Cache Architecture</span>
+        </h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          How your financial positions remain confidential, origin-isolated, and encrypted.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Zero Server Tracking -->
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-2 text-xs text-slate-600 dark:text-slate-300">
+          <div class="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+            <i data-lucide="server-off" class="w-4 h-4 text-indigo-500"></i>
+            <span>Zero Remote Database</span>
+          </div>
+          <p class="leading-relaxed">
+            Your holdings, purchase prices, and valuations are <strong>never stored on a remote server or database</strong>. Projections execute transiently in memory and are discarded.
+          </p>
+        </div>
+
+        <!-- AES-256-GCM Vault -->
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-2 text-xs text-slate-600 dark:text-slate-300">
+          <div class="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+            <i data-lucide="lock" class="w-4 h-4 text-indigo-500"></i>
+            <span>Passcode Lock & Encryption</span>
+          </div>
+          <p class="leading-relaxed">
+            Set an optional master PIN below. The vault encrypts your data with browser-native <strong>AES-256-GCM (PBKDF2 100k)</strong>. In browser storage, only random ciphertext is stored.
+          </p>
+        </div>
+
+        <!-- Privacy Shield -->
+        <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-2 text-xs text-slate-600 dark:text-slate-300">
+          <div class="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+            <i data-lucide="eye-off" class="w-4 h-4 text-indigo-500"></i>
+            <span>Privacy Shield (Stealth Mode)</span>
+          </div>
+          <p class="leading-relaxed">
+            Use the <strong>Privacy Mask</strong> button at the top to blur all dollar amounts on your screen, preventing shoulder-surfing in public.
+          </p>
+        </div>
+      </div>
+
+      <!-- Passcode Controls & Backup / Export Actions -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <!-- Passcode Setting -->
+        <div class="p-5 rounded-2xl apple-glass space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-900 dark:text-white">Vault Passcode Protection</span>
+            <span id="vault-lock-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-500">Unencrypted</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <input
+              type="password"
+              id="vault-passcode-input"
+              placeholder="Enter PIN or Passcode..."
+              class="w-full px-3.5 py-2.5 rounded-xl apple-glass text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+            />
+            <button
+              id="set-vault-passcode-btn"
+              class="px-4 py-2.5 rounded-xl apple-glass-btn text-xs font-semibold whitespace-nowrap"
+            >
+              Set PIN
+            </button>
+            <button
+              id="remove-vault-passcode-btn"
+              class="hidden px-3 py-2.5 rounded-xl apple-glass text-xs font-semibold text-rose-500 hover:text-rose-600 whitespace-nowrap"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <!-- Portability: Export, Import, Reset -->
+        <div class="p-5 rounded-2xl apple-glass space-y-3">
+          <span class="text-xs font-bold text-slate-900 dark:text-white block">Data Portability & Emergency Purge</span>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="export-vault-backup-btn" class="px-3.5 py-2 rounded-xl apple-glass text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition flex items-center space-x-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Export Backup (JSON)</span>
+            </button>
+
+            <label class="px-3.5 py-2 rounded-xl apple-glass text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer flex items-center space-x-1.5">
+              <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+              <span>Restore File</span>
+              <input type="file" id="import-vault-file-input" accept=".json" class="hidden" />
+            </label>
+
+            <button id="purge-vault-btn" class="px-3.5 py-2 rounded-xl apple-glass text-xs font-semibold text-rose-500 hover:text-rose-600 transition flex items-center space-x-1.5 ml-auto">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Reset & Purge</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Vault Unlock Passcode Prompt Overlay -->
+  <div id="vault-unlock-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-sm apple-glass rounded-3xl p-6 space-y-4 border border-black/[0.08] dark:border-white/[0.12] text-center shadow-2xl">
+      <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
+        <i data-lucide="lock" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Portfolio Vault is Locked</h3>
+        <p class="text-xs text-slate-400 mt-1">Enter your passcode to decrypt and access your positions.</p>
+      </div>
+      <form id="vault-unlock-form" class="space-y-3">
+        <input
+          type="password"
+          id="vault-unlock-input"
+          placeholder="Enter Passcode..."
+          class="w-full px-4 py-2.5 rounded-xl apple-glass text-center text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono tracking-widest text-base"
+          required
+          autofocus
+        />
+        <div class="flex items-center space-x-2">
+          <a href="/" class="w-1/2 py-2 rounded-xl apple-glass text-xs font-medium text-slate-400 block">Cancel</a>
+          <button type="submit" class="w-1/2 py-2 rounded-xl apple-glass-btn text-xs font-semibold">Unlock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="border-t border-black/[0.06] dark:border-white/[0.08] py-8 text-center text-xs text-slate-400 dark:text-slate-500">
+    <p>StockCast ML &copy; Personal Stock Price Forecasting Application</p>
+    <p class="mt-1">Powered by Alpaca Market Data API v2 & Scikit-Learn Quantile Engine</p>
+  </footer>
+
+  <!-- Apple-Style Floating Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- Dedicated Portfolio JavaScript Engine -->
+  <script src="/static/portfolio.js"></script>
+</body>
+</html>

@@ -242,6 +242,15 @@ if frontend_dist.exists() and (frontend_dist / "index.html").exists():
     def serve_frontend_root():
         """Serves the dashboard index.html on root access (http://127.0.0.1:8000)."""
         return FileResponse(frontend_dist / "index.html")
+
+    @app.get("/portfolio")
+    def serve_portfolio_page():
+        """Serves the dedicated owned stocks portfolio page."""
+        portfolio_file = frontend_dist / "portfolio.html"
+        if portfolio_file.exists():
+            return FileResponse(portfolio_file)
+        return FileResponse(frontend_dist / "index.html")
+
 else:
     @app.get("/")
     def root():
