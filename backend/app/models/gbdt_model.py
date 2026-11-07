@@ -132,15 +132,23 @@ class GBDTModel:
             r_lower = float(self.model_lower.predict(scaled_feat)[0])
             r_upper = float(self.model_upper.predict(scaled_feat)[0])
 
+            # In financial time series, extreme daily return predictions quickly compound into
+            # unrealistic multi-week divergences. We apply exponential mean-reversion dampening:
+            # Short-term momentum fades gracefully towards the long-term trend as the horizon expands.
+            dampening = np.exp(-0.06 * step_i)
+            r_median = np.clip(r_median * dampening, -0.025, 0.025)
+            r_lower = np.clip(r_lower * dampening, -0.040, 0.010)
+            r_upper = np.clip(r_upper * dampening, -0.010, 0.040)
+
             # Monotonicity guard: Ensure lower <= median <= upper
             if r_lower > r_median:
-                r_lower = r_median - 0.01
+                r_lower = r_median - 0.008
             if r_upper < r_median:
-                r_upper = r_median + 0.01
+                r_upper = r_median + 0.008
 
             # Time horizon uncertainty scaling: In stochastic processes, uncertainty 
             # scales proportionally with the square root of time: sigma * sqrt(t)
-            horizon_spread = hist_daily_vol * np.sqrt(step_i + 1) * 0.75
+            horizon_spread = hist_daily_vol * np.sqrt(step_i + 1) * 0.70
 
             # Compound forward prices from returns
             p_mean = p_mean * np.exp(r_median)

@@ -1,27 +1,120 @@
-/* Custom application styling */
+/* ==========================================================================
+   Apple Glass UI Design System for StockCast ML
+   Features: Frosted Glassmorphism, Dynamic Light/Dark Themes, Smooth Transitions
+   ========================================================================== */
 
-.active-tab {
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+:root {
+  --bg-gradient: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, rgba(245, 247, 251, 1) 75%);
+  --glass-surface: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.07);
+  --glass-border-hover: rgba(99, 102, 241, 0.35);
+  --glass-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.04), 0 4px 12px -2px rgba(0, 0, 0, 0.02);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --segment-bg: rgba(0, 0, 0, 0.05);
+  --segment-active: #ffffff;
+  --segment-active-text: #0f172a;
+  --segment-active-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-/* Custom modern dark scrollbar */
+html.dark {
+  --bg-gradient: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, #060911 65%);
+  --glass-surface: rgba(15, 23, 42, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(99, 102, 241, 0.45);
+  --glass-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --segment-bg: rgba(255, 255, 255, 0.06);
+  --segment-active: #1e293b;
+  --segment-active-text: #ffffff;
+  --segment-active-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  background: var(--bg-gradient);
+  color: var(--text-primary);
+  min-height: 100vh;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Apple Frosted Glass Card */
+.apple-glass {
+  background: var(--glass-surface);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apple-glass:hover {
+  border-color: var(--glass-border-hover);
+}
+
+/* Apple Segmented Control Pill */
+.apple-segment-container {
+  background: var(--segment-bg);
+  backdrop-filter: blur(12px);
+  padding: 3px;
+  border-radius: 9999px;
+  border: 1px solid var(--glass-border);
+}
+
+.apple-segment-item {
+  border-radius: 9999px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-secondary);
+}
+
+.apple-segment-item:hover {
+  color: var(--text-primary);
+}
+
+.apple-segment-item.active {
+  background: var(--segment-active);
+  color: var(--segment-active-text) !important;
+  box-shadow: var(--segment-active-shadow);
+  font-weight: 600;
+}
+
+/* Primary Glass Button */
+.apple-glass-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apple-glass-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.45);
+}
+
+.apple-glass-btn:active {
+  transform: translateY(0);
+}
+
+/* Custom Minimalist Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgba(148, 163, 184, 0.45);
 }
-

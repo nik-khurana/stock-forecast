@@ -91,6 +91,10 @@ class RidgeModel:
             scaled_feat = self.scaler.transform(last_features)
             r_pred = float(self.model.predict(scaled_feat)[0])
 
+            # Apply momentum decay dampening over the 30-day forward horizon
+            dampening = np.exp(-0.05 * step_i)
+            r_pred = np.clip(r_pred * dampening, -0.020, 0.020)
+
             # Uncertainty expands as sqrt of the forecast step (diffusion process)
             horizon_spread = residual_std * z_score * np.sqrt(step_i + 1) * 0.70
 

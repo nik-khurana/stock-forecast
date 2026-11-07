@@ -3,8 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StockCast ML | Intelligent Stock Price Forecasting</title>
+  <title>StockCast ML | Apple Glass Intelligent Stock Forecasting</title>
   
+  <!-- Inter & SF Pro Display font styling -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
   <!-- Tailwind CSS CDN with dark mode support -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -12,18 +17,14 @@
       darkMode: 'class',
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'sans-serif'],
+          },
           colors: {
             brand: {
-              50: '#eef2ff',
               400: '#818cf8',
               500: '#6366f1',
               600: '#4f46e5',
-            },
-            dark: {
-              bg: '#0a0d14',
-              surface: '#111726',
-              border: '#1e293b',
-              card: '#131b2e'
             }
           }
         }
@@ -38,31 +39,42 @@
 
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body class="bg-[#090d16] text-slate-100 min-h-screen font-sans antialiased selection:bg-indigo-500 selection:text-white">
+<body class="selection:bg-indigo-500 selection:text-white">
 
-  <!-- Navigation / Header -->
-  <header class="border-b border-slate-800/80 bg-[#0c111d]/90 backdrop-blur sticky top-0 z-50">
+  <!-- Apple Translucent Navigation Bar -->
+  <header class="border-b border-black/[0.06] dark:border-white/[0.08] bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-2xl sticky top-0 z-50 transition-colors duration-300">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Logo & Brand Title -->
       <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-          <i data-lucide="trending-up" class="w-5 h-5 text-white"></i>
+        <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <i data-lucide="sparkles" class="w-4 h-4 text-white"></i>
         </div>
         <div>
-          <span class="text-lg font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+          <span class="text-base font-bold tracking-tight text-slate-900 dark:text-white">
             StockCast ML
           </span>
-          <span class="hidden sm:inline-block ml-2 text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
-            3Y Alpaca + ML Quantile Engine
+          <span class="hidden sm:inline-block ml-2 text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium">
+            Alpaca v2 &bull; Quantile ML
           </span>
         </div>
       </div>
 
-      <!-- Live Alpaca Status Indicator -->
+      <!-- Right Header Actions: Alpaca Status + Theme Toggle -->
       <div class="flex items-center space-x-3 text-xs">
-        <div id="alpaca-status-badge" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="alpaca-status-text" class="font-medium">Connecting...</span>
+        <!-- Live Alpaca Status Badge -->
+        <div id="alpaca-status-badge" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
+          <span id="alpaca-status-text" class="font-medium text-[11px]">Connecting...</span>
         </div>
+
+        <!-- Light / Dark Mode Toggle Button -->
+        <button
+          id="theme-toggle-btn"
+          aria-label="Toggle theme"
+          class="w-9 h-9 rounded-full flex items-center justify-center border border-black/[0.08] dark:border-white/[0.12] bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 transition-all shadow-sm"
+        >
+          <i id="theme-toggle-icon" data-lucide="moon" class="w-4 h-4"></i>
+        </button>
       </div>
     </div>
   </header>
@@ -70,76 +82,78 @@
   <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-    <!-- Search Bar & Quick Ticker Buttons -->
+    <!-- Hero Search Bar & Quick Ticker Buttons -->
     <section class="space-y-4">
       <div class="relative max-w-2xl mx-auto">
         <form id="search-form" class="relative flex items-center">
           <div class="absolute left-4 pointer-events-none text-slate-400">
-            <i data-lucide="search" class="w-5 h-5"></i>
+            <i data-lucide="search" class="w-4 h-4"></i>
           </div>
           <input
             type="text"
             id="ticker-input"
             autocomplete="off"
             placeholder="Search any stock ticker (e.g. AAPL, NVDA, TSLA, MSFT)..."
-            class="w-full pl-12 pr-28 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-xl transition-all text-base"
+            class="w-full pl-11 pr-28 py-3.5 apple-glass rounded-2xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xl transition-all text-sm font-medium"
           />
           <button
             type="submit"
             id="predict-btn"
-            class="absolute right-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-1.5"
+            class="absolute right-2 px-4 py-2 apple-glass-btn text-xs font-semibold rounded-xl flex items-center space-x-1.5"
           >
             <span>Forecast</span>
-            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
           </button>
         </form>
       </div>
 
       <!-- Quick Ticker Selection Chips -->
       <div class="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
-        <span class="text-slate-400 font-medium mr-1">Popular:</span>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="AAPL">AAPL</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="NVDA">NVDA</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="MSFT">MSFT</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="TSLA">TSLA</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="GOOGL">GOOGL</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="AMZN">AMZN</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="META">META</button>
-        <button class="chip-btn px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 transition" data-ticker="SPY">SPY (S&P 500)</button>
+        <span class="text-slate-400 font-medium mr-1 text-[11px]">Popular:</span>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="AAPL">AAPL</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="NVDA">NVDA</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="MSFT">MSFT</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="TSLA">TSLA</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="GOOGL">GOOGL</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="AMZN">AMZN</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="META">META</button>
+        <button class="chip-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-[11px]" data-ticker="SPY">SPY (S&P 500)</button>
       </div>
     </section>
 
     <!-- Loading State -->
     <div id="loading-spinner" class="hidden py-16 text-center space-y-4">
-      <div class="inline-block w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-      <p class="text-slate-300 text-sm font-medium">
+      <div class="inline-block w-10 h-10 border-3 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+      <p class="text-slate-600 dark:text-slate-300 text-xs font-medium">
         Fetching 3 years of daily bars from Alpaca and training ML models...
       </p>
     </div>
 
-    <!-- Main Content Area -->
-    <div id="dashboard-content" class="space-y-8">
+    <!-- Main Dashboard Content -->
+    <div id="dashboard-content" class="space-y-6">
 
-      <!-- Stock Overview Header & Live Quote Bar -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl backdrop-blur">
+      <!-- Stock Overview Header Card -->
+      <div class="p-6 rounded-3xl apple-glass flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div class="flex items-center space-x-3">
-            <h1 id="stock-ticker" class="text-3xl font-extrabold tracking-tight text-white">AAPL</h1>
-            <span id="stock-source-pill" class="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 font-medium">
+            <h1 id="stock-ticker" class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">AAPL</h1>
+            <span id="stock-source-pill" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-medium">
               Alpaca Market Data v2
             </span>
           </div>
-          <p id="data-range-desc" class="text-xs text-slate-400 mt-1">Historical 3-Year Daily Bars (2023 - 2026)</p>
+          <p id="data-range-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Historical 3-Year Daily Bars (2023 - 2026)
+          </p>
         </div>
 
         <!-- Live Price & 24h Change -->
         <div class="flex items-baseline space-x-4">
           <div class="text-right">
-            <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Current Price</div>
-            <div id="current-price" class="text-3xl font-extrabold text-white tracking-tight">$342.41</div>
+            <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Current Price</div>
+            <div id="current-price" class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">$342.41</div>
           </div>
-          <div id="change-pill" class="px-3 py-1.5 rounded-xl font-bold text-sm flex items-center space-x-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <i id="change-icon" data-lucide="trending-up" class="w-4 h-4"></i>
+          <div id="change-pill" class="px-3 py-1.5 rounded-2xl font-bold text-xs flex items-center space-x-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+            <i id="change-icon" data-lucide="trending-up" class="w-3.5 h-3.5"></i>
             <span id="price-change">+1.25 (+0.42%)</span>
           </div>
         </div>
@@ -147,88 +161,130 @@
 
       <!-- KPI Summary Cards: 30-Day Outlook -->
       <div>
-        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center space-x-2">
-          <i data-lucide="calendar" class="w-4 h-4 text-indigo-400"></i>
-          <span>Next 30 Days Forecast Summary</span>
-        </h2>
+        <div class="flex items-center justify-between mb-3 px-1">
+          <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+            <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-500"></i>
+            <span>Next 30 Days Forecast Summary</span>
+          </h2>
+          <!-- Methodology Info Modal Trigger -->
+          <button id="toggle-methodology-btn" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium">
+            <i data-lucide="info" class="w-3.5 h-3.5"></i>
+            <span>How does prediction work?</span>
+          </button>
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <!-- 30D Mean -->
-          <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
-            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+          <div class="p-5 rounded-3xl apple-glass">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase">
               <span>30-Day Mean Price</span>
-              <i data-lucide="target" class="w-4 h-4 text-indigo-400"></i>
+              <i data-lucide="target" class="w-4 h-4 text-indigo-500"></i>
             </div>
-            <div id="stat-30d-mean" class="text-2xl font-bold text-white mt-2">$348.50</div>
-            <div class="text-xs mt-1 flex items-center space-x-1 text-slate-400">
-              <span>Expected return:</span>
-              <span id="stat-30d-roi" class="font-bold text-emerald-400">+1.78%</span>
+            <div id="stat-30d-mean" class="text-2xl font-bold text-slate-900 dark:text-white mt-2">$348.50</div>
+            <div class="text-xs mt-1 flex items-center space-x-1 text-slate-500 dark:text-slate-400">
+              <span>Expected ROI:</span>
+              <span id="stat-30d-roi" class="font-bold text-emerald-500">+1.78%</span>
             </div>
           </div>
 
           <!-- 30D Min (Lower Bound) -->
-          <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
-            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+          <div class="p-5 rounded-3xl apple-glass">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase">
               <span>30-Day Min Price</span>
-              <i data-lucide="arrow-down-right" class="w-4 h-4 text-rose-400"></i>
+              <i data-lucide="arrow-down-right" class="w-4 h-4 text-rose-500"></i>
             </div>
-            <div id="stat-30d-min" class="text-2xl font-bold text-rose-300 mt-2">$328.20</div>
-            <div class="text-xs text-slate-400 mt-1">Lower confidence bound (10th percentile)</div>
+            <div id="stat-30d-min" class="text-2xl font-bold text-rose-500 dark:text-rose-400 mt-2">$328.20</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Lower confidence bound (10th percentile)</div>
           </div>
 
           <!-- 30D Max (Upper Bound) -->
-          <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
-            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+          <div class="p-5 rounded-3xl apple-glass">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase">
               <span>30-Day Max Price</span>
-              <i data-lucide="arrow-up-right" class="w-4 h-4 text-emerald-400"></i>
+              <i data-lucide="arrow-up-right" class="w-4 h-4 text-emerald-500"></i>
             </div>
-            <div id="stat-30d-max" class="text-2xl font-bold text-emerald-300 mt-2">$368.90</div>
-            <div class="text-xs text-slate-400 mt-1">Upper confidence bound (90th percentile)</div>
+            <div id="stat-30d-max" class="text-2xl font-bold text-emerald-500 dark:text-emerald-400 mt-2">$368.90</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Upper confidence bound (90th percentile)</div>
           </div>
 
           <!-- Model Confidence / Range Spread -->
-          <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
-            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
-              <span>Predicted Volatility Band</span>
-              <i data-lucide="activity" class="w-4 h-4 text-cyan-400"></i>
+          <div class="p-5 rounded-3xl apple-glass">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase">
+              <span>Volatility Band</span>
+              <i data-lucide="activity" class="w-4 h-4 text-cyan-500"></i>
             </div>
-            <div id="stat-30d-spread" class="text-2xl font-bold text-cyan-300 mt-2">$40.70</div>
-            <div class="text-xs text-slate-400 mt-1">Spread between Min & Max</div>
+            <div id="stat-30d-spread" class="text-2xl font-bold text-cyan-600 dark:text-cyan-300 mt-2">$40.70</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Spread between Min & Max</div>
           </div>
         </div>
       </div>
 
-      <!-- Interactive 30-Day Forecast Chart Section -->
-      <div class="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+      <!-- Collapsible Explanation Drawer: How the Predictions Work -->
+      <div id="methodology-drawer" class="hidden p-6 rounded-3xl apple-glass space-y-4 border-indigo-500/20">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="brain-circuit" class="w-4 h-4 text-indigo-500"></i>
+            <span>How the Graphs & Predictions Work</span>
+          </h3>
+          <button id="close-methodology-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.05] space-y-1.5">
+            <span class="font-bold text-indigo-600 dark:text-indigo-400 block">1. 3-Year Alpaca Data & Features</span>
+            <p>
+              We pull 3 full years of daily bars (750+ sessions) via Alpaca's live market data API. We compute 21 stationary technical indicators: 14-day RSI, MACD lines, 20/50-day Moving Average ratios, Bollinger Bandwidth, ATR, and multi-period return lags.
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.05] space-y-1.5">
+            <span class="font-bold text-indigo-600 dark:text-indigo-400 block">2. 30-Day Quantile Forecasting</span>
+            <p>
+              Rather than predicting arbitrary prices, models predict next-day <strong>log returns</strong> with quantile loss. The <strong>Mean</strong> is the expected median, while <strong>Min</strong> (10th percentile) and <strong>Max</strong> (90th percentile) form the confidence envelope expanding with $\sigma\sqrt{t}$.
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.05] space-y-1.5">
+            <span class="font-bold text-indigo-600 dark:text-indigo-400 block">3. 3-Year Monthly Diffusion Cones</span>
+            <p>
+              For 3-year horizons, data is resampled into monthly closes. We fit an exponential trend drift $\ln(P_t) = \alpha + \beta t$ combined with geometric volatility diffusion cones, yielding monthly Min, Mean, and Max bounds for each of the next 36 months.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive 30-Day Forecast Chart Section (75% History / 25% Forecast) -->
+      <div class="p-6 rounded-3xl apple-glass space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div>
-            <h3 class="text-lg font-bold text-white flex items-center space-x-2">
-              <span>Historical Price (104 Weeks) & 30-Day Forecast Path</span>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+              <span>Historical Price & 30-Day Forecast Path</span>
             </h3>
-            <p class="text-xs text-slate-400 mt-0.5">
-              Historical daily closes transition seamlessly into predicted mean path and min/max confidence bounds.
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Balanced proportion: Left ~75% displays historical trend, right ~25% reveals the 30-day forward forecast envelope.
             </p>
           </div>
 
-          <!-- Controls: Timeframe Filter + Model Selector Tabs -->
+          <!-- Controls: Timeframe Filter + Model Selector Pills -->
           <div class="flex flex-wrap items-center gap-3">
             <!-- Timeframe Window Selector -->
-            <div class="flex items-center p-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs font-medium">
-              <span class="text-slate-400 px-2 font-medium">History:</span>
-              <button class="timeframe-tab px-2.5 py-1 rounded-lg transition active-tab" data-weeks="104">104W (2Y)</button>
-              <button class="timeframe-tab px-2.5 py-1 rounded-lg transition text-slate-400 hover:text-white" data-weeks="52">52W (1Y)</button>
-              <button class="timeframe-tab px-2.5 py-1 rounded-lg transition text-slate-400 hover:text-white" data-weeks="26">26W (6M)</button>
-              <button class="timeframe-tab px-2.5 py-1 rounded-lg transition text-slate-400 hover:text-white" data-weeks="all">All (3Y)</button>
+            <div class="apple-segment-container flex items-center">
+              <span class="text-slate-400 dark:text-slate-500 px-2 text-[11px] font-medium">History:</span>
+              <button class="apple-segment-item timeframe-tab active" data-weeks="75_25">75% / 25%</button>
+              <button class="apple-segment-item timeframe-tab" data-weeks="52">52W (1Y)</button>
+              <button class="apple-segment-item timeframe-tab" data-weeks="104">104W (2Y)</button>
+              <button class="apple-segment-item timeframe-tab" data-weeks="all">All (3Y)</button>
             </div>
 
-            <!-- Model Selector Tabs -->
-            <div class="flex items-center p-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs font-medium">
-              <button class="model-tab px-3 py-1.5 rounded-lg transition active-tab" data-model="ensemble">
-                Ensemble (Blended)
+            <!-- Model Selector Pills -->
+            <div class="apple-segment-container flex items-center">
+              <button class="apple-segment-item model-tab active" data-model="ensemble">
+                Ensemble
               </button>
-              <button class="model-tab px-3 py-1.5 rounded-lg transition text-slate-400 hover:text-white" data-model="gbdt">
+              <button class="apple-segment-item model-tab" data-model="gbdt">
                 GBDT
               </button>
-              <button class="model-tab px-3 py-1.5 rounded-lg transition text-slate-400 hover:text-white" data-model="ridge">
+              <button class="apple-segment-item model-tab" data-model="ridge">
                 Ridge
               </button>
             </div>
@@ -236,107 +292,108 @@
         </div>
 
         <!-- Chart Container -->
-        <div class="relative h-[440px] w-full">
+        <div class="relative h-[430px] w-full">
           <canvas id="forecastChart"></canvas>
         </div>
 
-        <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/60">
-          <div class="flex items-center space-x-4">
+        <!-- Legend and Meta Bar -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-black/[0.06] dark:border-white/[0.08] gap-2">
+          <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center space-x-1.5">
-              <span class="w-3 h-3 rounded-full bg-cyan-400 inline-block"></span>
-              <span id="chart-history-legend">Historical Close (Past 104 Weeks)</span>
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block"></span>
+              <span id="chart-history-legend">Historical Close (75% View)</span>
             </div>
             <div class="flex items-center space-x-1.5">
-              <span class="w-3 h-3 rounded-full bg-indigo-400 inline-block"></span>
-              <span>Predicted Mean Path</span>
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span>
+              <span>Predicted Mean Path (25% View)</span>
             </div>
             <div class="flex items-center space-x-1.5">
-              <span class="w-3 h-3 rounded bg-indigo-500/20 border border-indigo-400/40 inline-block"></span>
+              <span class="w-2.5 h-2.5 rounded bg-indigo-500/20 border border-indigo-500/40 inline-block"></span>
               <span>Min/Max Confidence Envelope</span>
             </div>
           </div>
-          <div id="calc-time" class="text-slate-500">Processed in 180ms</div>
+          <div id="calc-time" class="text-slate-400 dark:text-slate-500 text-[11px]">Processed in 180ms</div>
         </div>
       </div>
 
-      <!-- Backtest Accuracy & Technical Indicator Insights Card -->
-      <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
-          <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+      <!-- Out-of-Sample Backtesting & Technical Signals Card -->
+      <div class="p-6 rounded-3xl apple-glass space-y-4">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center space-x-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
           <span>Model Backtest Validation & Technical Momentum Signals</span>
         </h3>
 
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
           <!-- Directional Accuracy -->
-          <div class="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60">
-            <span class="text-slate-400 block font-medium">Out-of-Sample Accuracy</span>
-            <span id="stat-directional-acc" class="text-lg font-bold text-emerald-400 mt-1 block">57.8%</span>
-            <span class="text-[10px] text-slate-500">Directional Up/Down hit-rate</span>
+          <div class="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06]">
+            <span class="text-slate-500 dark:text-slate-400 block font-medium text-[11px]">Out-of-Sample Accuracy</span>
+            <span id="stat-directional-acc" class="text-lg font-bold text-emerald-500 dark:text-emerald-400 mt-1 block">57.8%</span>
+            <span class="text-[10px] text-slate-400">Directional Up/Down hit-rate</span>
           </div>
 
           <!-- MAPE Error -->
-          <div class="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60">
-            <span class="text-slate-400 block font-medium">Backtest MAPE</span>
-            <span id="stat-mape" class="text-lg font-bold text-indigo-300 mt-1 block">2.1%</span>
-            <span class="text-[10px] text-slate-500">Mean abs % error</span>
+          <div class="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06]">
+            <span class="text-slate-500 dark:text-slate-400 block font-medium text-[11px]">Backtest MAPE</span>
+            <span id="stat-mape" class="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-1 block">2.1%</span>
+            <span class="text-[10px] text-slate-400">Mean abs % error</span>
           </div>
 
           <!-- RSI (14) -->
-          <div class="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60">
-            <span class="text-slate-400 block font-medium">14-Day RSI</span>
-            <span id="stat-rsi" class="text-lg font-bold text-white mt-1 block">58.4</span>
-            <span id="stat-rsi-desc" class="text-[10px] text-emerald-400">Neutral / Bullish</span>
+          <div class="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06]">
+            <span class="text-slate-500 dark:text-slate-400 block font-medium text-[11px]">14-Day RSI</span>
+            <span id="stat-rsi" class="text-lg font-bold text-slate-900 dark:text-white mt-1 block">58.4</span>
+            <span id="stat-rsi-desc" class="text-[10px] text-emerald-500">Neutral / Bullish</span>
           </div>
 
           <!-- 20-Day Annualized Volatility -->
-          <div class="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60">
-            <span class="text-slate-400 block font-medium">Realized Volatility</span>
-            <span id="stat-vol" class="text-lg font-bold text-cyan-300 mt-1 block">24.5%</span>
-            <span class="text-[10px] text-slate-500">20-day annualized</span>
+          <div class="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06]">
+            <span class="text-slate-500 dark:text-slate-400 block font-medium text-[11px]">Realized Volatility</span>
+            <span id="stat-vol" class="text-lg font-bold text-cyan-600 dark:text-cyan-400 mt-1 block">24.5%</span>
+            <span class="text-[10px] text-slate-400">20-day annualized</span>
           </div>
 
           <!-- Price vs 20-Day SMA -->
-          <div class="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60">
-            <span class="text-slate-400 block font-medium">Trend vs 20-Day SMA</span>
-            <span id="stat-sma20" class="text-lg font-bold text-white mt-1 block">+1.2%</span>
-            <span class="text-[10px] text-slate-500">Short-term trend</span>
+          <div class="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06]">
+            <span class="text-slate-500 dark:text-slate-400 block font-medium text-[11px]">Trend vs 20-Day SMA</span>
+            <span id="stat-sma20" class="text-lg font-bold text-slate-900 dark:text-white mt-1 block">+1.2%</span>
+            <span class="text-[10px] text-slate-400">Short-term trend</span>
           </div>
 
           <!-- Price vs 50-Day SMA -->
-          <div class="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60">
-            <span class="text-slate-400 block font-medium">Trend vs 50-Day SMA</span>
-            <span id="stat-sma50" class="text-lg font-bold text-white mt-1 block">+3.8%</span>
-            <span class="text-[10px] text-slate-500">Medium-term trend</span>
+          <div class="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06]">
+            <span class="text-slate-500 dark:text-slate-400 block font-medium text-[11px]">Trend vs 50-Day SMA</span>
+            <span id="stat-sma50" class="text-lg font-bold text-slate-900 dark:text-white mt-1 block">+3.8%</span>
+            <span class="text-[10px] text-slate-400">Medium-term trend</span>
           </div>
         </div>
       </div>
 
       <!-- 3-Year Monthly Forecast Section -->
-      <div class="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-6">
+      <div class="p-6 rounded-3xl apple-glass space-y-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div class="flex items-center space-x-2">
-              <i data-lucide="compass" class="w-5 h-5 text-indigo-400"></i>
-              <h3 class="text-lg font-bold text-white">3-Year Multi-Month Horizon Forecast (36 Months)</h3>
+              <i data-lucide="compass" class="w-5 h-5 text-indigo-500"></i>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">3-Year Multi-Month Horizon Forecast (36 Months)</h3>
             </div>
-            <p class="text-xs text-slate-400 mt-1">
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Monthly resampled drift & volatility diffusion modeling expected trajectory with multi-year uncertainty cones.
             </p>
           </div>
 
           <!-- Multi-Year Snapshot Chips -->
           <div class="flex items-center space-x-2 text-xs">
-            <div class="px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+            <div class="px-3 py-1.5 rounded-2xl apple-glass">
               <span class="text-slate-400">Year 1 End: </span>
-              <span id="y1-end-stat" class="font-bold text-indigo-300">$375.00</span>
+              <span id="y1-end-stat" class="font-bold text-indigo-600 dark:text-indigo-400">$375.00</span>
             </div>
-            <div class="px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+            <div class="px-3 py-1.5 rounded-2xl apple-glass">
               <span class="text-slate-400">Year 2 End: </span>
-              <span id="y2-end-stat" class="font-bold text-indigo-300">$410.00</span>
+              <span id="y2-end-stat" class="font-bold text-indigo-600 dark:text-indigo-400">$410.00</span>
             </div>
-            <div class="px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+            <div class="px-3 py-1.5 rounded-2xl apple-glass">
               <span class="text-slate-400">Year 3 End: </span>
-              <span id="y3-end-stat" class="font-bold text-indigo-300">$450.00</span>
+              <span id="y3-end-stat" class="font-bold text-indigo-600 dark:text-indigo-400">$450.00</span>
             </div>
           </div>
         </div>
@@ -347,10 +404,10 @@
         </div>
 
         <!-- 36-Month Detailed Projection Table (Collapsible) -->
-        <div class="border border-slate-800 rounded-xl overflow-hidden">
-          <button id="toggle-table-btn" class="w-full px-4 py-3 bg-slate-800/40 hover:bg-slate-800/70 transition flex items-center justify-between text-xs font-semibold text-slate-300">
+        <div class="border border-black/[0.06] dark:border-white/[0.08] rounded-2xl overflow-hidden">
+          <button id="toggle-table-btn" class="w-full px-4 py-3 bg-black/[0.02] dark:bg-white/[0.03] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
             <span class="flex items-center space-x-2">
-              <i data-lucide="table" class="w-4 h-4 text-indigo-400"></i>
+              <i data-lucide="table" class="w-4 h-4 text-indigo-500"></i>
               <span>View Full 36-Month Projections Table (Min, Max, Mean)</span>
             </span>
             <i id="table-chevron" data-lucide="chevron-down" class="w-4 h-4 transition-transform"></i>
@@ -358,7 +415,7 @@
           
           <div id="monthly-table-container" class="hidden overflow-x-auto max-h-[380px] overflow-y-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-800/90 text-slate-400 sticky top-0 uppercase tracking-wider font-semibold">
+              <thead class="bg-black/[0.04] dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 sticky top-0 uppercase tracking-wider font-semibold">
                 <tr>
                   <th class="py-2.5 px-4">Month</th>
                   <th class="py-2.5 px-4">Period</th>
@@ -368,7 +425,7 @@
                   <th class="py-2.5 px-4 text-right">Volatility Spread</th>
                 </tr>
               </thead>
-              <tbody id="monthly-table-body" class="divide-y divide-slate-800/60 font-mono">
+              <tbody id="monthly-table-body" class="divide-y divide-black/[0.04] dark:divide-white/[0.06] font-mono">
                 <!-- Dynamically populated -->
               </tbody>
             </table>
@@ -379,12 +436,11 @@
     </div>
   </main>
 
-  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+  <footer class="border-t border-black/[0.06] dark:border-white/[0.08] py-8 text-center text-xs text-slate-400 dark:text-slate-500">
     <p>StockCast ML &copy; Personal Stock Price Forecasting Application</p>
-    <p class="mt-1">Powered by Alpaca Market Data API v2 & Scikit-Learn Machine Learning Pipeline</p>
+    <p class="mt-1">Powered by Alpaca Market Data API v2 & Scikit-Learn Quantile Engine</p>
   </footer>
 
   <script src="/static/app.js"></script>
 </body>
 </html>
-
