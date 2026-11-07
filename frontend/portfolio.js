@@ -22,6 +22,7 @@ let isVaultLocked = false;
 let currentVaultPasscode = null;
 let showPortfolioSupportLine = true;
 let holdingsSortOrder = "asc";
+let isMarketSessionOpen = false;
 
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
@@ -35,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPortfolioEventListeners();
   initPortfolioAutocomplete();
   checkPortfolioMarketStatus();
+  setInterval(checkPortfolioMarketStatus, 60000);
 
   // If vault is locked, show unlock modal on initial visit
   if (isVaultLocked) {
@@ -879,6 +881,7 @@ function renderHoldingsTable() {
 
   // Ensure active positions are ordered according to sort preference
   sortHoldings(holdingsSortOrder, false);
+  updatePriceColumnHeader(isMarketSessionOpen);
 
   if (countElem) {
     countElem.textContent = `${portfolioHoldings.length}`;
@@ -1498,6 +1501,9 @@ async function checkPortfolioMarketStatus() {
     const data = await res.json();
     if (data.market_status) {
       const ms = data.market_status;
+      isMarketSessionOpen = !!ms.is_open;
+      updatePriceColumnHeader(isMarketSessionOpen);
+
       const pill = document.getElementById("market-status-pill");
       const dot = document.getElementById("market-dot");
       const text = document.getElementById("market-status-text");
@@ -1515,6 +1521,23 @@ async function checkPortfolioMarketStatus() {
     }
   } catch (err) {
     console.error("Market status check error:", err);
+  }
+}
+
+/**
+ * Updates Active Stock Positions table price column header based on market session state.
+ * When market is open: "Live Price" (with pulsating live green indicator).
+ * When market is closed: "Price at Close".
+ */
+function updatePriceColumnHeader(isOpen) {
+  const th = document.getElementById("th-current-price");
+  if (!th) return;
+  if (isOpen) {
+    th.innerHTML = `<span>Live Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Market Open (Live Price)"></span>`;
+    th.title = "Live streaming market price during open trading session";
+  } else {
+    th.innerHTML = `<span>Price at Close</span>`;
+    th.title = "Official closing price from the most recent trading session";
   }
 }
 
