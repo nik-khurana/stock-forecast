@@ -77,6 +77,12 @@
           <span id="market-status-text" class="font-medium text-[11px] text-slate-700 dark:text-slate-300">Checking Market...</span>
         </div>
 
+        <!-- 10s Live Sync Badge (Active during regular trading hours) -->
+        <div id="portfolio-live-badge" class="hidden items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md transition-all duration-300" title="Market is live: updating portfolio values & forecasts every 10 seconds (6 req/min)">
+          <span id="portfolio-live-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>10s Live Sync</span>
+        </div>
+
         <!-- Privacy Shield Mask Button -->
         <button
           id="vault-privacy-toggle"

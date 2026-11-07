@@ -24,6 +24,11 @@ let showPortfolioSupportLine = true;
 let holdingsSortOrder = "asc";
 let isMarketSessionOpen = false;
 
+// Live 10-Second Market Streaming State
+let portfolioLiveTimer = null;
+let isPortfolioLiveUpdating = false;
+const LIVE_PORTFOLIO_INTERVAL_MS = 10000; // Exactly 10 seconds (6 requests/minute)
+
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
@@ -35,8 +40,9 @@ document.addEventListener("DOMContentLoaded", () => {
   loadPortfolioVault();
   initPortfolioEventListeners();
   initPortfolioAutocomplete();
+  initPortfolioVisibilityListener();
   checkPortfolioMarketStatus();
-  setInterval(checkPortfolioMarketStatus, 60000);
+  setInterval(checkPortfolioMarketStatus, 30000); // Check US market trading session status every 30s
 
   // If vault is locked, show unlock modal on initial visit
   if (isVaultLocked) {
@@ -306,6 +312,7 @@ async function savePortfolioVault() {
     if (updatedElem) {
       updatedElem.textContent = `Saved ${new Date().toLocaleTimeString()}`;
     }
+    syncPortfolioLiveStreaming();
   } catch (err) {
     console.error("Error saving portfolio vault:", err);
     showToast("Error saving portfolio vault to local storage.", "error");
@@ -1016,19 +1023,32 @@ function clearPortfolioForecastUI() {
   if (dailyTbody) dailyTbody.innerHTML = "";
   const monthlyTbody = document.getElementById("portfolio-monthly-tbody");
   if (monthlyTbody) monthlyTbody.innerHTML = "";
+  syncPortfolioLiveStreaming();
 }
 
 /**
  * Fetches aggregate 60-day & 3-year portfolio forecast from backend.
+ * When isBackgroundUpdate is true (10s live tick during market hours):
+ * - Runs silently in background without spinning buttons or toast spam.
+ * - Smoothly updates chart points via chart.update('none').
  */
-async function fetchPortfolioForecast() {
+async function fetchPortfolioForecast(isBackgroundUpdate = false) {
   if (portfolioHoldings.length === 0) return;
 
   const recalcBtn = document.getElementById("portfolio-recalc-btn");
-  if (recalcBtn) {
+  if (!isBackgroundUpdate && recalcBtn) {
     recalcBtn.classList.add("opacity-50", "pointer-events-none");
     const icon = recalcBtn.querySelector("i");
     if (icon) icon.classList.add("animate-spin");
+  }
+
+  if (isBackgroundUpdate) {
+    isPortfolioLiveUpdating = true;
+    const dot = document.getElementById("portfolio-live-dot");
+    if (dot) {
+      dot.classList.add("scale-150");
+      setTimeout(() => dot && dot.classList.remove("scale-150"), 400);
+    }
   }
 
   try {
@@ -1050,13 +1070,20 @@ async function fetchPortfolioForecast() {
     const data = await res.json();
     portfolioForecastData = data;
 
-    renderPortfolioDashboard(data);
-    showToast(`Portfolio forecast calculated (${data.execution_time_ms}ms)`, "success");
+    renderPortfolioDashboard(data, isBackgroundUpdate);
+    if (!isBackgroundUpdate) {
+      showToast(`Portfolio forecast calculated (${data.execution_time_ms}ms)`, "success");
+    }
+    syncPortfolioLiveStreaming();
   } catch (err) {
     console.error("Portfolio forecast error:", err);
-    showToast(err.message || "Could not calculate portfolio forecast.", "error");
+    if (!isBackgroundUpdate) {
+      showToast(err.message || "Could not calculate portfolio forecast.", "error");
+    }
   } finally {
-    if (recalcBtn) {
+    if (isBackgroundUpdate) {
+      isPortfolioLiveUpdating = false;
+    } else if (recalcBtn) {
       recalcBtn.classList.remove("opacity-50", "pointer-events-none");
       const icon = recalcBtn.querySelector("i");
       if (icon) icon.classList.remove("animate-spin");
@@ -1067,7 +1094,7 @@ async function fetchPortfolioForecast() {
 /**
  * Renders portfolio statistics, KPI cards, tables, and charts.
  */
-function renderPortfolioDashboard(data) {
+function renderPortfolioDashboard(data, isLiveUpdate = false) {
   const setTxt = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.textContent = val;
@@ -1144,9 +1171,9 @@ function renderPortfolioDashboard(data) {
   }
 
   renderHoldingsTable();
-  renderPortfolio60dChart(data.portfolio_60d_daily, data.current_portfolio_value);
+  renderPortfolio60dChart(data.portfolio_60d_daily, data.current_portfolio_value, isLiveUpdate);
   populatePortfolioDailyTable(data.portfolio_60d_daily, data.current_portfolio_value);
-  renderPortfolio3yChart(data.portfolio_3y_monthly);
+  renderPortfolio3yChart(data.portfolio_3y_monthly, isLiveUpdate);
   populatePortfolioMonthlyTable(data.portfolio_3y_monthly);
 
   applyPrivacyMask();
@@ -1154,8 +1181,9 @@ function renderPortfolioDashboard(data) {
 
 /**
  * Renders the 60-Day Aggregate Investment Forecast Chart.
+ * In live streaming mode (isLiveUpdate = true), smoothly updates datasets without destroying canvas.
  */
-function renderPortfolio60dChart(dailyPoints, currentVal) {
+function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) {
   const ctx = document.getElementById("portfolio60dChart").getContext("2d");
   const dark = isDarkMode();
 
@@ -1163,6 +1191,20 @@ function renderPortfolio60dChart(dailyPoints, currentVal) {
   const means = dailyPoints.map((p) => p.mean);
   const mins = dailyPoints.map((p) => p.min);
   const maxs = dailyPoints.map((p) => p.max);
+
+  if (isLiveUpdate && portfolio60dChart) {
+    portfolio60dChart.data.labels = labels;
+    if (portfolio60dChart.data.datasets[0]) portfolio60dChart.data.datasets[0].data = maxs;
+    if (portfolio60dChart.data.datasets[1]) portfolio60dChart.data.datasets[1].data = mins;
+    if (portfolio60dChart.data.datasets[2]) portfolio60dChart.data.datasets[2].data = means;
+    if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels && portfolio60dChart.data.datasets[3]) {
+      const floor = portfolioForecastData.support_levels.critical_support_floor;
+      portfolio60dChart.data.datasets[3].data = labels.map(() => floor);
+      portfolio60dChart.data.datasets[3].label = `Portfolio Support Floor ($${floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+    }
+    portfolio60dChart.update('none');
+    return;
+  }
 
   if (portfolio60dChart) {
     portfolio60dChart.destroy();
@@ -1360,8 +1402,9 @@ function populatePortfolioDailyTable(dailyPoints, currentVal) {
 
 /**
  * Renders the 3-Year Monthly Portfolio Forecast Chart.
+ * In live streaming mode (isLiveUpdate = true), smoothly updates datasets without destroying canvas.
  */
-function renderPortfolio3yChart(monthlyPoints) {
+function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
   const ctx = document.getElementById("portfolio3yChart").getContext("2d");
   const dark = isDarkMode();
 
@@ -1369,6 +1412,20 @@ function renderPortfolio3yChart(monthlyPoints) {
   const means = monthlyPoints.map((p) => p.mean);
   const mins = monthlyPoints.map((p) => p.min);
   const maxs = monthlyPoints.map((p) => p.max);
+
+  if (isLiveUpdate && portfolio3yChart) {
+    portfolio3yChart.data.labels = labels;
+    if (portfolio3yChart.data.datasets[0]) portfolio3yChart.data.datasets[0].data = maxs;
+    if (portfolio3yChart.data.datasets[1]) portfolio3yChart.data.datasets[1].data = mins;
+    if (portfolio3yChart.data.datasets[2]) portfolio3yChart.data.datasets[2].data = means;
+    if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels && portfolio3yChart.data.datasets[3]) {
+      const floor3y = portfolioForecastData.support_levels.monthly_support_floor;
+      portfolio3yChart.data.datasets[3].data = labels.map(() => floor3y);
+      portfolio3yChart.data.datasets[3].label = `Portfolio 3Y Floor ($${floor3y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+    }
+    portfolio3yChart.update('none');
+    return;
+  }
 
   if (portfolio3yChart) {
     portfolio3yChart.destroy();
@@ -1510,7 +1567,9 @@ function populatePortfolioMonthlyTable(monthlyPoints) {
  */
 async function checkPortfolioMarketStatus() {
   try {
-    const res = await fetch("/api/health");
+    const urlParams = new URLSearchParams(window.location.search);
+    const isSimulateOpen = urlParams.get("simulate_open") === "true";
+    const res = await fetch(`/api/health${isSimulateOpen ? "?simulate_open=true" : ""}`);
     if (!res.ok) return;
     const data = await res.json();
     if (data.market_status) {
@@ -1533,9 +1592,72 @@ async function checkPortfolioMarketStatus() {
         }
       }
     }
+    syncPortfolioLiveStreaming();
   } catch (err) {
     console.error("Market status check error:", err);
   }
+}
+
+/**
+ * Synchronizes the 10-second live background streaming interval for portfolio forecasts.
+ * Active when US markets are open, tab is visible, vault is unlocked, and positions exist.
+ */
+function syncPortfolioLiveStreaming() {
+  const isDocumentVisible = !document.hidden;
+  const shouldStream = isMarketSessionOpen && isDocumentVisible && portfolioHoldings.length > 0 && !isVaultLocked;
+  const badge = document.getElementById("portfolio-live-badge");
+
+  if (badge) {
+    if (shouldStream) {
+      badge.classList.remove("hidden");
+      badge.classList.add("flex");
+    } else {
+      badge.classList.add("hidden");
+      badge.classList.remove("flex");
+    }
+  }
+
+  if (shouldStream) {
+    if (!portfolioLiveTimer) {
+      portfolioLiveTimer = setInterval(triggerPortfolioLiveRefresh, LIVE_PORTFOLIO_INTERVAL_MS);
+      console.log(`[Portfolio Live] Started 10s streaming interval (${1000 / (LIVE_PORTFOLIO_INTERVAL_MS / 1000)} req/min) for ${portfolioHoldings.length} holdings`);
+    }
+  } else {
+    if (portfolioLiveTimer) {
+      clearInterval(portfolioLiveTimer);
+      portfolioLiveTimer = null;
+      console.log("[Portfolio Live] Paused 10s streaming interval");
+    }
+  }
+}
+
+/**
+ * Triggered every 10 seconds during active market session.
+ */
+function triggerPortfolioLiveRefresh() {
+  if (!isMarketSessionOpen || document.hidden || isPortfolioLiveUpdating || isVaultLocked || portfolioHoldings.length === 0) {
+    return;
+  }
+  fetchPortfolioForecast(true);
+}
+
+/**
+ * Handles tab blur / minimize to pause live streaming and immediate resume upon focus.
+ */
+function initPortfolioVisibilityListener() {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (portfolioLiveTimer) {
+        clearInterval(portfolioLiveTimer);
+        portfolioLiveTimer = null;
+      }
+    } else {
+      syncPortfolioLiveStreaming();
+      if (isMarketSessionOpen && portfolioHoldings.length > 0 && !isVaultLocked) {
+        triggerPortfolioLiveRefresh();
+      }
+    }
+  });
 }
 
 /**

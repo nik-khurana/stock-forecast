@@ -18,6 +18,12 @@ let selectedModel = "ensemble";         // Active model: 'ensemble', 'gbdt', or 
 let selectedHistoryWeeks = 104;         // Active history timeframe: 104 (default), 52, 26, or 'all'
 let showSupportLine = true;             // Dynamic support level floor toggle state
 
+// Live 10-Second Market Streaming State
+let isMarketOpen = false;
+let liveStreamTimer = null;
+let isLiveStreamingUpdating = false;
+const LIVE_STREAM_INTERVAL_MS = 10000;  // Exactly 10 seconds (6 requests/minute)
+
 // Chart.js instances
 let forecastChart = null;
 let monthlyChart = null;
@@ -33,7 +39,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initCSVExportListeners();
   initShareButton();
   updateNavPortfolioBadge();
+  initVisibilityListener();
   checkHealth();
+  setInterval(checkHealth, 30000); // Check US market trading session status every 30s
 
   // URL Deep Linking: Check if ?ticker=XYZ and ?model=XYZ are present in the browser address bar
   const urlParams = new URLSearchParams(window.location.search);
@@ -544,7 +552,9 @@ function fallbackCopyTextToClipboard(text) {
  */
 async function checkHealth() {
   try {
-    const res = await fetch("/api/health");
+    const urlParams = new URLSearchParams(window.location.search);
+    const isSimulateOpen = urlParams.get("simulate_open") === "true";
+    const res = await fetch(`/api/health${isSimulateOpen ? "?simulate_open=true" : ""}`);
     const data = await res.json();
     const statusText = document.getElementById("alpaca-status-text");
     const statusBadge = document.getElementById("alpaca-status-badge");
@@ -562,6 +572,7 @@ async function checkHealth() {
     // Live US Market Session Status Pill
     if (data.market_status) {
       const ms = data.market_status;
+      isMarketOpen = Boolean(ms.is_open);
       const pill = document.getElementById("market-status-pill");
       const dot = document.getElementById("market-dot");
       const text = document.getElementById("market-status-text");
@@ -577,23 +588,100 @@ async function checkHealth() {
         }
       }
     }
+
+    syncLiveStreaming();
   } catch (err) {
     console.error("Health check error:", err);
   }
 }
 
 /**
- * Asynchronously fetches stock forecast from FastAPI backend with smooth skeleton shimmer.
+ * Synchronizes the 10-second live background streaming timer.
+ * Automatically active whenever US markets are open and tab is focused.
  */
-async function fetchForecast(ticker) {
+function syncLiveStreaming() {
+  const isDocumentVisible = !document.hidden;
+  const shouldStream = isMarketOpen && isDocumentVisible;
+  const badge = document.getElementById("live-stream-badge");
+
+  if (badge) {
+    if (shouldStream) {
+      badge.classList.remove("hidden");
+      badge.classList.add("flex");
+    } else {
+      badge.classList.add("hidden");
+      badge.classList.remove("flex");
+    }
+  }
+
+  if (shouldStream) {
+    if (!liveStreamTimer) {
+      liveStreamTimer = setInterval(triggerLiveRefresh, LIVE_STREAM_INTERVAL_MS);
+      console.log(`[StockCast Live] Started 10s live updates (${1000 / (LIVE_STREAM_INTERVAL_MS / 1000)} req/min) for ${currentTicker}`);
+    }
+  } else {
+    if (liveStreamTimer) {
+      clearInterval(liveStreamTimer);
+      liveStreamTimer = null;
+      console.log("[StockCast Live] Paused live streaming");
+    }
+  }
+}
+
+/**
+ * Periodically called every 10 seconds during open market hours.
+ */
+function triggerLiveRefresh() {
+  if (!isMarketOpen || document.hidden || isLiveStreamingUpdating || !currentTicker) {
+    return;
+  }
+  fetchForecast(currentTicker, true);
+}
+
+/**
+ * Handles tab blur / minimize to suspend polling and immediate resume upon focus.
+ */
+function initVisibilityListener() {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (liveStreamTimer) {
+        clearInterval(liveStreamTimer);
+        liveStreamTimer = null;
+      }
+    } else {
+      syncLiveStreaming();
+      if (isMarketOpen && currentTicker) {
+        triggerLiveRefresh();
+      }
+    }
+  });
+}
+
+/**
+ * Asynchronously fetches stock forecast from FastAPI backend with smooth skeleton shimmer.
+ * When isBackgroundUpdate is true (10s live tick):
+ * - Does NOT trigger layout shifts, skeletons, or full page dimming.
+ * - Updates chart data points in-place via chart.update('none').
+ * - Skips toast notification spam.
+ */
+async function fetchForecast(ticker, isBackgroundUpdate = false) {
   const skeleton = document.getElementById("skeleton-loader");
   const content = document.getElementById("dashboard-content");
 
-  if (!currentData && skeleton && content) {
-    skeleton.classList.remove("hidden");
-    content.classList.add("hidden");
-  } else if (content) {
-    content.classList.add("opacity-40", "pointer-events-none");
+  if (!isBackgroundUpdate) {
+    if (!currentData && skeleton && content) {
+      skeleton.classList.remove("hidden");
+      content.classList.add("hidden");
+    } else if (content) {
+      content.classList.add("opacity-40", "pointer-events-none");
+    }
+  } else {
+    isLiveStreamingUpdating = true;
+    const dot = document.getElementById("live-stream-dot");
+    if (dot) {
+      dot.classList.add("scale-150");
+      setTimeout(() => dot && dot.classList.remove("scale-150"), 400);
+    }
   }
 
   try {
@@ -606,22 +694,39 @@ async function fetchForecast(ticker) {
     currentData = data;
     currentTicker = data.ticker;
 
-    // Deep Linking: Update browser URL bar (?ticker=XYZ&model=XYZ) without reloading
-    window.history.pushState({}, '', `?ticker=${currentTicker}&model=${selectedModel}`);
+    if (!isBackgroundUpdate) {
+      // Deep Linking: Update browser URL bar (?ticker=XYZ&model=XYZ) without reloading
+      const urlParams = new URLSearchParams(window.location.search);
+      const isSimulateOpen = urlParams.get("simulate_open") === "true";
+      const simParam = isSimulateOpen ? "&simulate_open=true" : "";
+      window.history.pushState({}, '', `?ticker=${currentTicker}&model=${selectedModel}${simParam}`);
 
-    renderDashboard(data);
-    const toastMsg = data.company_name
-      ? `Loaded live data for ${data.company_name} (${currentTicker})`
-      : `Loaded live data for ${currentTicker}`;
-    showToast(toastMsg, "success");
+      renderDashboard(data, false);
+      const toastMsg = data.company_name
+        ? `Loaded live data for ${data.company_name} (${currentTicker})`
+        : `Loaded live data for ${currentTicker}`;
+      showToast(toastMsg, "success");
+    } else {
+      // Background 10-second tick: update in-place without toast spam
+      renderDashboard(data, true);
+    }
+
+    // Ensure live streaming timer is running if market is open
+    syncLiveStreaming();
   } catch (err) {
     console.error("Forecast fetch error:", err);
-    showToast(err.message || `Could not fetch forecast for ${ticker}`, "error");
+    if (!isBackgroundUpdate) {
+      showToast(err.message || `Could not fetch forecast for ${ticker}`, "error");
+    }
   } finally {
-    if (skeleton) skeleton.classList.add("hidden");
-    if (content) {
-      content.classList.remove("hidden", "opacity-40", "pointer-events-none");
-      content.classList.add("fade-in");
+    if (isBackgroundUpdate) {
+      isLiveStreamingUpdating = false;
+    } else {
+      if (skeleton) skeleton.classList.add("hidden");
+      if (content) {
+        content.classList.remove("hidden", "opacity-40", "pointer-events-none");
+        content.classList.add("fade-in");
+      }
     }
   }
 }
@@ -645,18 +750,20 @@ function updateSupportLineButtonState() {
 /**
  * Renders all dashboard statistics and visual components.
  */
-function renderDashboard(data) {
+function renderDashboard(data, isLiveUpdate = false) {
   document.getElementById("stock-ticker").textContent = data.ticker;
   const companyElem = document.getElementById("company-name");
   if (companyElem) {
     companyElem.textContent = data.company_name || "";
   }
   const tickerInput = document.getElementById("ticker-input");
-  if (tickerInput) {
+  if (tickerInput && !isLiveUpdate) {
     tickerInput.value = data.ticker;
   }
 
-  document.getElementById("calc-time").textContent = `Processed in ${data.execution_time_ms}ms`;
+  document.getElementById("calc-time").textContent = isLiveUpdate
+    ? `Live Sync in ${data.execution_time_ms}ms`
+    : `Processed in ${data.execution_time_ms}ms`;
 
   // Support Floor Defense Metrics
   if (data.support_levels) {
@@ -806,19 +913,21 @@ function renderDashboard(data) {
     if (reasonElem) reasonElem.textContent = rec.reasoning;
     if (noteElem) noteElem.textContent = rec.divergence_note;
 
-    // Automatically set the preferred model as default for this stock
-    selectedModel = rec.model;
-    document.querySelectorAll(".model-tab").forEach((tab) => {
-      if (tab.getAttribute("data-model") === rec.model) {
-        tab.classList.add("active");
-      } else {
-        tab.classList.remove("active");
-      }
-    });
+    // Automatically set the preferred model as default only on initial manual load
+    if (!isLiveUpdate) {
+      selectedModel = rec.model;
+      document.querySelectorAll(".model-tab").forEach((tab) => {
+        if (tab.getAttribute("data-model") === rec.model) {
+          tab.classList.add("active");
+        } else {
+          tab.classList.remove("active");
+        }
+      });
+    }
   }
 
-  updateModelView();
-  renderMonthlyForecast(data.forecast_3y_monthly);
+  updateModelView(isLiveUpdate);
+  renderMonthlyForecast(data.forecast_3y_monthly, isLiveUpdate);
 
   if (window.lucide) {
     lucide.createIcons();
@@ -828,7 +937,7 @@ function renderDashboard(data) {
 /**
  * Updates 30-day KPI cards, daily table, and re-renders the 30-day forecast chart.
  */
-function updateModelView() {
+function updateModelView(isLiveUpdate = false) {
   if (!currentData) return;
 
   const modelPayload = currentData.models_comparison[selectedModel] || currentData.models_comparison["ensemble"];
@@ -885,13 +994,14 @@ function updateModelView() {
     });
   }
 
-  renderForecastChart(currentData.historical_points, daily);
+  renderForecastChart(currentData.historical_points, daily, isLiveUpdate);
 }
 
 /**
  * Renders the primary 30-Day Chart with Guaranteed 75% History / 25% Prediction Proportion.
+ * In live streaming mode (isLiveUpdate = true), smoothly updates datasets without destroying the canvas.
  */
-function renderForecastChart(historical, dailyForecast) {
+function renderForecastChart(historical, dailyForecast, isLiveUpdate = false) {
   const ctx = document.getElementById("forecastChart").getContext("2d");
   const dark = isDarkMode();
 
@@ -926,6 +1036,24 @@ function renderForecastChart(historical, dailyForecast) {
     minPoints.push({ x: xCoord, y: p.min, date: p.date, seriesLabel: "Predicted Min (Lower Bound)" });
     maxPoints.push({ x: xCoord, y: p.max, date: p.date, seriesLabel: "Predicted Max (Upper Bound)" });
   });
+
+  // In-place live update: avoid destroying the chart and re-rendering with flicker!
+  if (isLiveUpdate && forecastChart) {
+    if (forecastChart.data.datasets[0]) forecastChart.data.datasets[0].data = histPoints;
+    if (forecastChart.data.datasets[1]) forecastChart.data.datasets[1].data = maxPoints;
+    if (forecastChart.data.datasets[2]) forecastChart.data.datasets[2].data = minPoints;
+    if (forecastChart.data.datasets[3]) forecastChart.data.datasets[3].data = meanPoints;
+    if (showSupportLine && currentData && currentData.support_levels && forecastChart.data.datasets[4]) {
+      const floor = currentData.support_levels.critical_support_floor;
+      forecastChart.data.datasets[4].data = [
+        { x: 0, y: floor, date: "Floor Baseline", seriesLabel: `Critical Support Floor ($${floor.toFixed(2)})` },
+        { x: 100, y: floor, date: "30D Horizon", seriesLabel: `Critical Support Floor ($${floor.toFixed(2)})` }
+      ];
+      forecastChart.data.datasets[4].label = `Critical Support Floor ($${floor.toFixed(2)})`;
+    }
+    forecastChart.update('none');
+    return;
+  }
 
   if (forecastChart) {
     forecastChart.destroy();
@@ -1166,8 +1294,9 @@ function renderForecastChart(historical, dailyForecast) {
 
 /**
  * Renders the 3-Year Monthly Forecast Chart and populates the 36-month table.
+ * In live streaming mode (isLiveUpdate = true), smoothly updates datasets without destroying the canvas.
  */
-function renderMonthlyForecast(monthlyRes) {
+function renderMonthlyForecast(monthlyRes, isLiveUpdate = false) {
   const ctx = document.getElementById("monthlyChart").getContext("2d");
   const dark = isDarkMode();
   const monthlyPoints = monthlyRes.monthly_forecast;
@@ -1176,6 +1305,21 @@ function renderMonthlyForecast(monthlyRes) {
   const means = monthlyPoints.map((p) => p.mean);
   const mins = monthlyPoints.map((p) => p.min);
   const maxs = monthlyPoints.map((p) => p.max);
+
+  if (isLiveUpdate && monthlyChart) {
+    monthlyChart.data.labels = labels;
+    if (monthlyChart.data.datasets[0]) monthlyChart.data.datasets[0].data = maxs;
+    if (monthlyChart.data.datasets[1]) monthlyChart.data.datasets[1].data = mins;
+    if (monthlyChart.data.datasets[2]) monthlyChart.data.datasets[2].data = means;
+    if (showSupportLine && currentData && currentData.support_levels && monthlyChart.data.datasets[3]) {
+      const floor3y = currentData.support_levels.monthly_support_floor;
+      monthlyChart.data.datasets[3].data = labels.map(() => floor3y);
+      monthlyChart.data.datasets[3].label = `3Y Structural Support Floor ($${floor3y.toFixed(2)})`;
+    }
+    monthlyChart.update('none');
+    populateMonthlyForecastTable(monthlyPoints);
+    return;
+  }
 
   if (monthlyChart) {
     monthlyChart.destroy();
@@ -1295,7 +1439,15 @@ function renderMonthlyForecast(monthlyRes) {
   });
 
   // Populate 36-Month Detailed Table
+  populateMonthlyForecastTable(monthlyPoints);
+}
+
+/**
+ * Populates or updates the 36-Month Forecast Table.
+ */
+function populateMonthlyForecastTable(monthlyPoints) {
   const tbody = document.getElementById("monthly-table-body");
+  if (!tbody) return;
   tbody.innerHTML = "";
 
   monthlyPoints.forEach((p) => {

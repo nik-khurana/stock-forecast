@@ -50,7 +50,7 @@ TICKER_REGEX = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
 # Sliding-window rate limiter state: IP -> List of timestamps
 _IP_REQUEST_LOGS: Dict[str, List[float]] = {}
-MAX_REQUESTS_PER_MINUTE = 50
+MAX_REQUESTS_PER_MINUTE = 200
 RATE_WINDOW_SECONDS = 60.0
 
 def enforce_rate_limit(client_ip: str):
@@ -82,7 +82,7 @@ def enforce_rate_limit(client_ip: str):
     fresh_timestamps.append(now)
     _IP_REQUEST_LOGS[client_ip] = fresh_timestamps
 
-def get_market_status() -> Dict[str, Any]:
+def get_market_status(simulate_open: bool = False) -> Dict[str, Any]:
     """
     Computes current NYSE / NASDAQ trading session status in US Eastern Time (ET).
     - Regular Hours: Monday - Friday 9:30 AM - 4:00 PM ET
@@ -93,6 +93,17 @@ def get_market_status() -> Dict[str, Any]:
     now_et = datetime.now(ZoneInfo("America/New_York"))
     weekday = now_et.weekday()  # 0=Mon, 4=Fri, 5=Sat, 6=Sun
     minute_of_day = now_et.hour * 60 + now_et.minute
+
+    if simulate_open:
+        return {
+            "is_open": True,
+            "session": "regular",
+            "label": "Market Open (Simulated Live)",
+            "sub_label": "Testing 10s streaming sync",
+            "et_time": now_et.strftime("%I:%M %p ET"),
+            "color": "emerald",
+            "polling_interval_seconds": 10,
+        }
 
     if weekday >= 5:
         return {
@@ -204,7 +215,7 @@ POPULAR_TICKERS = [
 ]
 
 @app.get("/api/health")
-def health():
+def health(simulate_open: bool = Query(False, description="Simulate live market open for off-hours testing")):
     """
     Health check endpoint.
     Used by the frontend to display live Alpaca connection and US Market status badges.
@@ -215,7 +226,7 @@ def health():
         "alpaca_base_url": get_alpaca_base_url(),
         "alpaca_data_url": get_alpaca_data_url(),
         "supported_models": ["ensemble", "gbdt", "ridge"],
-        "market_status": get_market_status(),
+        "market_status": get_market_status(simulate_open=simulate_open),
     }
 
 @app.get("/api/search")
