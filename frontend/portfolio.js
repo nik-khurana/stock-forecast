@@ -21,6 +21,7 @@ let isPrivacyMaskActive = false;
 let isVaultLocked = false;
 let currentVaultPasscode = null;
 let showPortfolioSupportLine = true;
+let holdingsSortOrder = "asc";
 
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
@@ -249,6 +250,7 @@ function loadPortfolioVault() {
       isVaultLocked = false;
       currentVaultPasscode = null;
       portfolioHoldings = Array.isArray(parsed.holdings) ? parsed.holdings : [];
+      sortHoldings(holdingsSortOrder, false);
       if (statusBadge) {
         statusBadge.textContent = "Local Storage (Unencrypted)";
         statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500";
@@ -464,6 +466,7 @@ function initPortfolioEventListeners() {
       sharesInput.value = "";
       priceInput.value = "";
 
+      sortHoldings(holdingsSortOrder, false);
       savePortfolioVault();
       renderHoldingsTable();
       fetchPortfolioForecast();
@@ -474,16 +477,34 @@ function initPortfolioEventListeners() {
   if (sampleBtn) {
     sampleBtn.addEventListener("click", () => {
       portfolioHoldings = [
-        { ticker: "NVDA", shares: 25, buy_price: 112.50, added_at: new Date().toISOString() },
         { ticker: "AAPL", shares: 15, buy_price: 195.00, added_at: new Date().toISOString() },
         { ticker: "MSFT", shares: 12, buy_price: 388.00, added_at: new Date().toISOString() },
+        { ticker: "NVDA", shares: 25, buy_price: 112.50, added_at: new Date().toISOString() },
         { ticker: "TSLA", shares: 10, buy_price: 215.00, added_at: new Date().toISOString() }
       ];
-      savePortfolioVault();
+      sortHoldings(holdingsSortOrder, true);
       renderHoldingsTable();
       fetchPortfolioForecast();
-      showToast("Loaded sample portfolio (NVDA, AAPL, MSFT, TSLA)", "success");
+      showToast("Loaded sample portfolio (Sorted A to Z: AAPL, MSFT, NVDA, TSLA)", "success");
     });
+  }
+
+  // Sort Active Positions (A to Z toggle)
+  const sortBtn = document.getElementById("sort-holdings-az-btn");
+  const thSortSymbol = document.getElementById("th-sort-symbol");
+
+  function toggleHoldingsSort() {
+    const nextOrder = holdingsSortOrder === "asc" ? "desc" : "asc";
+    sortHoldings(nextOrder, true);
+    renderHoldingsTable();
+    showToast(nextOrder === "asc" ? "Positions sorted A to Z" : "Positions sorted Z to A", "info");
+  }
+
+  if (sortBtn) {
+    sortBtn.addEventListener("click", toggleHoldingsSort);
+  }
+  if (thSortSymbol) {
+    thSortSymbol.addEventListener("click", toggleHoldingsSort);
   }
 
   // Clear All Positions
@@ -624,6 +645,7 @@ function initPortfolioEventListeners() {
               }
             });
             portfolioHoldings = clean;
+            sortHoldings(holdingsSortOrder, false);
             await savePortfolioVault();
             renderHoldingsTable();
             fetchPortfolioForecast();
@@ -676,6 +698,7 @@ function initPortfolioEventListeners() {
         currentVaultPasscode = pin;
         isVaultLocked = false;
         portfolioHoldings = Array.isArray(decrypted.holdings) ? decrypted.holdings : [];
+        sortHoldings(holdingsSortOrder, false);
         unlockModal.classList.add("hidden");
         document.getElementById("vault-unlock-input").value = "";
         showToast("Portfolio vault unlocked successfully", "success");
@@ -815,12 +838,47 @@ function initPortfolioAutocomplete() {
 }
 
 /**
+ * Sorts active stock positions (A to Z or Z to A)
+ */
+function sortHoldings(order = "asc", save = true) {
+  holdingsSortOrder = order;
+  portfolioHoldings.sort((a, b) => {
+    return order === "asc"
+      ? a.ticker.localeCompare(b.ticker)
+      : b.ticker.localeCompare(a.ticker);
+  });
+  updateSortHoldingsUI();
+  if (save) {
+    savePortfolioVault();
+  }
+}
+
+function updateSortHoldingsUI() {
+  const label = document.getElementById("sort-holdings-az-label");
+  const icon = document.getElementById("sort-holdings-az-icon");
+  const colIcon = document.getElementById("symbol-col-sort-icon");
+
+  const isAsc = holdingsSortOrder === "asc";
+  if (label) label.textContent = isAsc ? "Sorted A → Z" : "Sorted Z → A";
+  if (icon) {
+    icon.setAttribute("data-lucide", isAsc ? "arrow-down-a-z" : "arrow-up-z-a");
+  }
+  if (colIcon) {
+    colIcon.setAttribute("data-lucide", isAsc ? "arrow-down-a-z" : "arrow-up-z-a");
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+/**
  * Renders the table of active positions in the portfolio.
  */
 function renderHoldingsTable() {
   const tbody = document.getElementById("portfolio-holdings-tbody");
   const countElem = document.getElementById("portfolio-positions-count");
   if (!tbody) return;
+
+  // Ensure active positions are ordered according to sort preference
+  sortHoldings(holdingsSortOrder, false);
 
   if (countElem) {
     countElem.textContent = `${portfolioHoldings.length}`;
