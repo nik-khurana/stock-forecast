@@ -59,10 +59,12 @@ class ForecastService:
         t0 = time.time()
 
         # -------------------------------------------------------------
-        # STEP 1: Ingest 3 Years of Daily Bars & Latest Quote from Alpaca
+        # STEP 1: Ingest 3 Years of Daily Bars & Latest Quote Concurrently
         # -------------------------------------------------------------
-        bars_df, data_source = self.alpaca_client.get_historical_bars(ticker, years=3)
-        quote = self.alpaca_client.get_latest_quote(ticker)
+        bundle = self.alpaca_client.get_stock_bundle(ticker, years=3)
+        bars_df = bundle["bars_df"]
+        data_source = bundle["data_source"]
+        quote = bundle["quote"]
         current_price = quote["price"]
         last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
 

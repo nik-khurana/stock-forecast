@@ -11,6 +11,7 @@ This module communicates with Alpaca's Market Data API (v2) to:
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
 import requests
 import pandas as pd
 import numpy as np
@@ -26,6 +27,10 @@ from backend.app.config import (
 # Maps cache_key -> (timestamp_of_cache, cached_dataframe, source_type)
 _CACHE: Dict[str, Tuple[float, pd.DataFrame, str]] = {}
 CACHE_TTL_SECONDS = 600  # 10 minutes cache duration for historical daily bars
+
+# Negative cache: maps invalid/not-found tickers to (timestamp, error_str)
+_NEGATIVE_CACHE: Dict[str, Tuple[float, str]] = {}
+NEGATIVE_CACHE_TTL = 300  # 5 minutes negative cache
 
 
 class AlpacaClient:
@@ -61,6 +66,14 @@ class AlpacaClient:
         """
         ticker = ticker.upper().strip()
         cache_key = f"bars_{ticker}_{years}"
+
+        # Check negative cache to block repeated spam queries for invalid tickers
+        if ticker in _NEGATIVE_CACHE:
+            neg_time, neg_msg = _NEGATIVE_CACHE[ticker]
+            if time.time() - neg_time < NEGATIVE_CACHE_TTL:
+                print(f"[AlpacaClient] Negative cache hit for {ticker}. Serving fallback simulation.")
+                df = self._generate_simulated_bars(ticker, years=years)
+                return df, "demo_mode"
 
         # -------------------------------------------------------------
         # STEP 1: Check in-memory cache to avoid duplicate API requests
@@ -225,6 +238,39 @@ class AlpacaClient:
                 return self._fallback_quote(ticker)
         except Exception:
             return self._fallback_quote(ticker)
+
+    def get_stock_bundle(self, ticker: str, years: int = 3) -> Dict[str, Any]:
+        """
+        Fetches historical bars and latest quote concurrently in parallel threads,
+        cutting latency by ~50%. Also computes 52-week high, low, and range percentage.
+        """
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fut_bars = executor.submit(self.get_historical_bars, ticker, years)
+            fut_quote = executor.submit(self.get_latest_quote, ticker)
+            
+            bars_df, data_source = fut_bars.result()
+            quote = fut_quote.result()
+
+        # Compute 52-week High / Low from the most recent 252 trading sessions (~1 year)
+        recent_year = bars_df.iloc[-252:] if len(bars_df) >= 252 else bars_df
+        high_52w = float(recent_year["high"].max()) if not recent_year.empty else float(quote["price"])
+        low_52w = float(recent_year["low"].min()) if not recent_year.empty else float(quote["price"])
+        
+        current_p = float(quote["price"])
+        if high_52w > low_52w:
+            pos_52w_pct = round(((current_p - low_52w) / (high_52w - low_52w)) * 100.0, 1)
+        else:
+            pos_52w_pct = 50.0
+
+        quote["high_52w"] = round(high_52w, 2)
+        quote["low_52w"] = round(low_52w, 2)
+        quote["position_52w_pct"] = max(0.0, min(100.0, pos_52w_pct))
+
+        return {
+            "bars_df": bars_df,
+            "data_source": data_source,
+            "quote": quote
+        }
 
     def _fallback_quote(self, ticker: str) -> Dict[str, Any]:
         """Calculates quote metrics from historical bars when live snapshot is unavailable."""

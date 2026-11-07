@@ -66,6 +66,13 @@ def get_alpaca_data_url() -> str:
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", "8000"))
 
+# Production CORS Security: comma-separated origins (default '*' for local development)
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+
 # Dynamic getters and module-level constants for backwards compatibility
 ALPACA_API_KEY_ID = get_alpaca_key_id()
 ALPACA_API_SECRET_KEY = get_alpaca_secret_key()

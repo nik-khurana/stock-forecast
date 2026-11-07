@@ -146,15 +146,32 @@
           </p>
         </div>
 
-        <!-- Live Price & 24h Change -->
-        <div class="flex items-baseline space-x-4">
-          <div class="text-right">
-            <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Current Price</div>
-            <div id="current-price" class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">$342.41</div>
+        <!-- Live Price & 24h Change with 52-Week Range Progress -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-6">
+          <!-- 52-Week Range Bar -->
+          <div class="space-y-1.5 w-48 hidden sm:block">
+            <div class="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+              <span>52W L: <b id="low-52w" class="text-slate-600 dark:text-slate-300">$164.08</b></span>
+              <span>52W H: <b id="high-52w" class="text-slate-600 dark:text-slate-300">$345.00</b></span>
+            </div>
+            <div class="w-full h-1.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden relative">
+              <div id="range-52w-fill" class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-500" style="width: 75%;"></div>
+            </div>
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 text-center">
+              Position: <span id="pos-52w-text" class="text-indigo-500 dark:text-indigo-400 font-semibold">75%</span>
+            </div>
           </div>
-          <div id="change-pill" class="px-3 py-1.5 rounded-2xl font-bold text-xs flex items-center space-x-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <i id="change-icon" data-lucide="trending-up" class="w-3.5 h-3.5"></i>
-            <span id="price-change">+1.25 (+0.42%)</span>
+
+          <!-- Price & Change -->
+          <div class="flex items-baseline space-x-4">
+            <div class="text-right">
+              <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Current Price</div>
+              <div id="current-price" class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">$342.41</div>
+            </div>
+            <div id="change-pill" class="px-3 py-1.5 rounded-2xl font-bold text-xs flex items-center space-x-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+              <i id="change-icon" data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span id="price-change">+1.25 (+0.42%)</span>
+            </div>
           </div>
         </div>
       </div>
@@ -378,7 +395,13 @@
               Model: Blended Ensemble
             </span>
           </div>
-          <span class="text-xs text-slate-500 dark:text-slate-400">Day-by-day Min, Mean, Max & Volatility Spread</span>
+          <div class="flex items-center space-x-3">
+            <button id="export-30d-csv-btn" class="apple-glass px-2.5 py-1 rounded-full text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-500 flex items-center space-x-1 transition shadow-sm">
+              <i data-lucide="download" class="w-3 h-3 text-indigo-500"></i>
+              <span>Export CSV</span>
+            </button>
+            <span class="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">Day-by-day Min, Mean, Max</span>
+          </div>
         </div>
 
         <div class="border border-black/[0.06] dark:border-white/[0.08] rounded-2xl overflow-hidden">
@@ -429,8 +452,12 @@
             </p>
           </div>
 
-          <!-- Multi-Year Snapshot Chips -->
-          <div class="flex items-center space-x-2 text-xs">
+          <!-- Multi-Year Snapshot Chips & Export Button -->
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <button id="export-3y-csv-btn" class="apple-glass px-2.5 py-1.5 rounded-2xl text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-500 flex items-center space-x-1 transition shadow-sm">
+              <i data-lucide="download" class="w-3 h-3 text-indigo-500"></i>
+              <span>Export 3Y CSV</span>
+            </button>
             <div class="px-3 py-1.5 rounded-2xl apple-glass">
               <span class="text-slate-400">Year 1 End: </span>
               <span id="y1-end-stat" class="font-bold text-indigo-600 dark:text-indigo-400">$375.00</span>
@@ -488,6 +515,9 @@
     <p>StockCast ML &copy; Personal Stock Price Forecasting Application</p>
     <p class="mt-1">Powered by Alpaca Market Data API v2 & Scikit-Learn Quantile Engine</p>
   </footer>
+
+  <!-- Apple-Style Floating Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <script src="/static/app.js"></script>
 </body>

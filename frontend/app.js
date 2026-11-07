@@ -3,9 +3,12 @@
  *
  * Implements:
  * 1. Apple Glass UI Design with Light / Dark Mode Toggle & Persistence.
- * 2. Guaranteed 75% Historical / 25% Prediction Horizontal Canvas Proportion across all timeframes.
- * 3. Dynamic Chart.js Rendering for 30-Day Daily and 3-Year Monthly Horizons.
- * 4. Technical Indicators and Out-of-Sample Backtesting Metrics.
+ * 2. URL Deep Linking: Read & sync ?ticker=... in the browser address bar.
+ * 3. 1-Click CSV Export for both 30-Day Daily and 3-Year Monthly Forecasts.
+ * 4. Apple-Style Floating Toast Notification System (replaces raw alerts).
+ * 5. 52-Week High / Low Range Position Widget.
+ * 6. Guaranteed 75% Historical / 25% Prediction Horizontal Canvas Proportion.
+ * 7. Technical Indicators and Out-of-Sample Backtesting Metrics.
  */
 
 // Global Application State
@@ -26,9 +29,70 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   initEventListeners();
+  initCSVExportListeners();
   checkHealth();
-  fetchForecast("AAPL");
+
+  // URL Deep Linking: Check if ?ticker=XYZ is present in the browser address bar
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialTicker = (urlParams.get("ticker") || "AAPL").trim().toUpperCase();
+  const tickerInput = document.getElementById("ticker-input");
+  if (tickerInput) {
+    tickerInput.value = initialTicker;
+  }
+  fetchForecast(initialTicker);
 });
+
+/**
+ * Apple-Style Floating Toast Notification System
+ */
+function showToast(message, type = "info") {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  const isErr = type === "error";
+  const isSuccess = type === "success";
+
+  const borderColor = isErr ? "border-rose-500/30" : isSuccess ? "border-emerald-500/30" : "border-indigo-500/30";
+  const iconName = isErr ? "alert-circle" : isSuccess ? "check-circle" : "info";
+  const iconColor = isErr ? "text-rose-500" : isSuccess ? "text-emerald-500" : "text-indigo-500";
+
+  toast.className = `apple-glass pointer-events-auto flex items-center space-x-2.5 px-4 py-3 rounded-2xl border ${borderColor} shadow-2xl text-xs transition-all duration-300 opacity-0 translate-y-2`;
+  toast.innerHTML = `
+    <i data-lucide="${iconName}" class="w-4 h-4 ${iconColor}"></i>
+    <span class="text-slate-800 dark:text-slate-200 font-medium">${message}</span>
+  `;
+
+  container.appendChild(toast);
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+
+  requestAnimationFrame(() => {
+    toast.classList.remove("opacity-0", "translate-y-2");
+  });
+
+  setTimeout(() => {
+    toast.classList.add("opacity-0", "translate-y-2");
+    setTimeout(() => toast.remove(), 350);
+  }, 3500);
+}
+
+/**
+ * Triggers CSV file download in the browser.
+ */
+function exportCSV(filename, csvContent) {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast(`Downloaded ${filename}`, "success");
+}
 
 /**
  * Initializes and toggles Light and Dark modes with localStorage persistence.
@@ -58,7 +122,6 @@ function initTheme() {
         lucide.createIcons();
       }
 
-      // Re-render charts with appropriate theme colors
       if (currentData) {
         updateModelView();
         renderMonthlyForecast(currentData.forecast_3y_monthly);
@@ -184,6 +247,49 @@ function initEventListeners() {
 }
 
 /**
+ * Attaches CSV Export Click Handlers.
+ */
+function initCSVExportListeners() {
+  const export30Btn = document.getElementById("export-30d-csv-btn");
+  if (export30Btn) {
+    export30Btn.addEventListener("click", () => {
+      if (!currentData) {
+        showToast("No forecast loaded to export.", "error");
+        return;
+      }
+      const modelPayload = currentData.models_comparison[selectedModel] || currentData.models_comparison["ensemble"];
+      const daily = modelPayload.daily;
+      const currentPrice = currentData.quote.price;
+
+      let csv = "Day,Date,Predicted Min,Predicted Mean,Predicted Max,Volatility Spread,Expected ROI (%)\n";
+      daily.forEach((pt, idx) => {
+        const spread = (pt.max - pt.min).toFixed(2);
+        const chgPct = (((pt.mean - currentPrice) / currentPrice) * 100).toFixed(2);
+        csv += `Day +${idx + 1},${pt.date},${pt.min.toFixed(2)},${pt.mean.toFixed(2)},${pt.max.toFixed(2)},${spread},${chgPct}%\n`;
+      });
+      exportCSV(`${currentTicker}_30Day_Forecast_${selectedModel}.csv`, csv);
+    });
+  }
+
+  const export3yBtn = document.getElementById("export-3y-csv-btn");
+  if (export3yBtn) {
+    export3yBtn.addEventListener("click", () => {
+      if (!currentData) {
+        showToast("No forecast loaded to export.", "error");
+        return;
+      }
+      const monthly = currentData.forecast_3y_monthly.monthly_forecast;
+      let csv = "Month Index,Year-Month,Predicted Min,Predicted Mean,Predicted Max,Volatility Spread\n";
+      monthly.forEach((p) => {
+        const spread = (p.max - p.min).toFixed(2);
+        csv += `Month +${p.month_index},${p.year_month},${p.min.toFixed(2)},${p.mean.toFixed(2)},${p.max.toFixed(2)},${spread}\n`;
+      });
+      exportCSV(`${currentTicker}_3Year_Monthly_Forecast.csv`, csv);
+    });
+  }
+}
+
+/**
  * Checks backend health and updates the header badge.
  */
 async function checkHealth() {
@@ -221,14 +327,20 @@ async function fetchForecast(ticker) {
   try {
     const res = await fetch(`/api/stock/${currentTicker}/forecast?model=${selectedModel}`);
     if (!res.ok) {
-      throw new Error(`API returned HTTP ${res.status}`);
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `API returned HTTP ${res.status}`);
     }
     const data = await res.json();
     currentData = data;
+
+    // Deep Linking: Update browser URL bar (?ticker=XYZ) without reloading
+    window.history.pushState({}, '', `?ticker=${currentTicker}`);
+
     renderDashboard(data);
+    showToast(`Loaded live data for ${currentTicker}`, "success");
   } catch (err) {
     console.error("Forecast fetch error:", err);
-    alert(`Could not fetch forecast for ${currentTicker}. Please verify the ticker symbol.`);
+    showToast(err.message || `Could not fetch forecast for ${currentTicker}`, "error");
   } finally {
     loading.classList.add("hidden");
     content.classList.remove("opacity-30");
@@ -261,6 +373,20 @@ function renderDashboard(data) {
     changePill.className =
       "px-3 py-1.5 rounded-2xl font-bold text-xs flex items-center space-x-1 bg-rose-500/10 text-rose-500 border border-rose-500/20";
     changeIcon.setAttribute("data-lucide", "trending-down");
+  }
+
+  // 52-Week Range Bar Widget
+  if (quote.high_52w && quote.low_52w) {
+    const lowElem = document.getElementById("low-52w");
+    const highElem = document.getElementById("high-52w");
+    const posElem = document.getElementById("pos-52w-text");
+    const barElem = document.getElementById("range-52w-fill");
+
+    if (lowElem) lowElem.textContent = `$${quote.low_52w.toFixed(2)}`;
+    if (highElem) highElem.textContent = `$${quote.high_52w.toFixed(2)}`;
+    const posPct = quote.position_52w_pct !== undefined ? quote.position_52w_pct : 50;
+    if (posElem) posElem.textContent = `${posPct}%`;
+    if (barElem) barElem.style.width = `${posPct}%`;
   }
 
   const sourcePill = document.getElementById("stock-source-pill");
@@ -337,7 +463,7 @@ function renderDashboard(data) {
 }
 
 /**
- * Updates 30-day KPI cards and re-renders the 30-day forecast chart.
+ * Updates 30-day KPI cards, daily table, and re-renders the 30-day forecast chart.
  */
 function updateModelView() {
   if (!currentData) return;
@@ -401,17 +527,11 @@ function updateModelView() {
 
 /**
  * Renders the primary 30-Day Chart with Guaranteed 75% History / 25% Prediction Proportion.
- *
- * For any selected historical window (26W, 52W, 104W, or All 3Y):
- * - The left 75% of the chart width represents the historical price movement.
- * - The right 25% of the chart width represents the 30-day forward prediction path & envelope.
- * - The transition occurs at exact x = 75 with an indicator line.
  */
 function renderForecastChart(historical, dailyForecast) {
   const ctx = document.getElementById("forecastChart").getContext("2d");
   const dark = isDarkMode();
 
-  // 1. Slice historical bars according to selectedHistoryWeeks
   let histSlice;
   if (selectedHistoryWeeks === "all") {
     histSlice = historical;
@@ -421,10 +541,8 @@ function renderForecastChart(historical, dailyForecast) {
   }
 
   const nHist = histSlice.length;
-  const nPred = dailyForecast.length; // 30 points
+  const nPred = dailyForecast.length;
 
-  // 2. Map coordinates:
-  // History: x in [0, 75]
   const histPoints = histSlice.map((p, i) => ({
     x: (75.0 * i) / Math.max(nHist - 1, 1),
     y: p.close,
@@ -435,8 +553,6 @@ function renderForecastChart(historical, dailyForecast) {
   const lastClose = histSlice[histSlice.length - 1].close;
   const lastDate = histSlice[histSlice.length - 1].date;
 
-  // Prediction: x in [75, 100]
-  // The first point at x=75 connects directly to the last historical close
   const meanPoints = [{ x: 75.0, y: lastClose, date: `${lastDate} (Transition)`, seriesLabel: "Predicted Mean Path" }];
   const minPoints = [{ x: 75.0, y: lastClose, date: `${lastDate} (Transition)`, seriesLabel: "Predicted Min" }];
   const maxPoints = [{ x: 75.0, y: lastClose, date: `${lastDate} (Transition)`, seriesLabel: "Predicted Max" }];
@@ -452,7 +568,6 @@ function renderForecastChart(historical, dailyForecast) {
     forecastChart.destroy();
   }
 
-  // Theme-aware palette (Pitch Black OLED in Dark Mode)
   const gridColor = dark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.05)";
   const tickColor = dark ? "#64748b" : "#94a3b8";
   const tooltipBg = dark ? "rgba(0, 0, 0, 0.95)" : "#ffffff";
@@ -460,7 +575,6 @@ function renderForecastChart(historical, dailyForecast) {
   const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
-  // Custom Plugin: Draw vertical divider at x = 75 (Forecast Start)
   const forecastDividerPlugin = {
     id: "forecastDivider",
     afterDraw: (chart) => {
@@ -479,7 +593,6 @@ function renderForecastChart(historical, dailyForecast) {
       c.lineTo(xPixel, yScale.bottom);
       c.stroke();
 
-      // Divider pill badge
       c.fillStyle = dark ? "rgba(99, 102, 241, 0.85)" : "rgba(79, 70, 229, 0.85)";
       c.font = "600 10px Inter, -apple-system, sans-serif";
       c.textAlign = "center";
@@ -589,14 +702,13 @@ function renderForecastChart(historical, dailyForecast) {
                 const frac = val / 75.0;
                 const idx = Math.min(Math.round(frac * (nHist - 1)), nHist - 1);
                 if (idx >= 0 && histSlice[idx]) {
-                  // Format as YYYY-MM
                   return histSlice[idx].date.substring(0, 7);
                 }
               } else {
                 const fFrac = (val - 75.0) / 25.0;
                 const fIdx = Math.min(Math.round(fFrac * (nPred - 1)), nPred - 1);
                 if (fIdx >= 0 && dailyForecast[fIdx]) {
-                  return dailyForecast[fIdx].date.substring(5); // MM-DD
+                  return dailyForecast[fIdx].date.substring(5);
                 }
               }
               return "";
