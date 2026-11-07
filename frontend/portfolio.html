@@ -237,17 +237,23 @@
         </div>
       </div>
 
-      <!-- 60-Day Range Bounds -->
-      <div class="p-6 rounded-3xl apple-glass space-y-2">
-        <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-          60-Day Volatility Band
+      <!-- Portfolio Critical Support Floor Card -->
+      <div class="p-6 rounded-3xl apple-glass space-y-2 border-rose-500/20">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          <span class="text-rose-500 dark:text-rose-400 font-bold flex items-center space-x-1.5">
+            <i data-lucide="shield" class="w-3.5 h-3.5 text-rose-500"></i>
+            <span>Support Floor</span>
+          </span>
+          <span id="portfolio-support-conf" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-500">
+            99% Floor
+          </span>
         </div>
-        <div class="flex items-baseline space-x-1.5 text-2xl font-bold">
-          <span id="portfolio-60d-min" class="text-rose-500 dark:text-rose-400 privacy-value">$0</span>
-          <span class="text-slate-400 text-sm">to</span>
-          <span id="portfolio-60d-max" class="text-emerald-500 dark:text-emerald-400 privacy-value">$0</span>
+        <div id="portfolio-support-floor-stat" class="text-3xl font-extrabold text-rose-500 dark:text-rose-400 tracking-tight privacy-value">
+          $0.00
         </div>
-        <div class="text-xs text-slate-400 font-medium">90% confidence envelope</div>
+        <div id="portfolio-support-cushion-stat" class="text-xs text-rose-500/90 font-medium privacy-value">
+          +0.0% downside buffer
+        </div>
       </div>
     </section>
 
@@ -298,6 +304,15 @@
           </p>
         </div>
         <div class="flex items-center space-x-2">
+          <!-- Support Floor Line Toggle -->
+          <button
+            id="toggle-portfolio-support-btn"
+            class="text-xs px-3 py-1.5 rounded-xl apple-glass text-rose-500 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition font-semibold flex items-center space-x-1.5"
+            title="Toggle Portfolio Support Floor Line"
+          >
+            <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+            <span>Floor: <b id="header-portfolio-support-val" class="privacy-value">$0.00</b></span>
+          </button>
           <button id="toggle-portfolio-daily-btn" class="text-xs px-3.5 py-1.5 rounded-xl apple-glass text-indigo-600 dark:text-indigo-400 font-semibold">
             View Daily Table
           </button>

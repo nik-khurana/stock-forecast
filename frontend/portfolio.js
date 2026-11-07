@@ -20,6 +20,7 @@ let portfolio3yChart = null;
 let isPrivacyMaskActive = false;
 let isVaultLocked = false;
 let currentVaultPasscode = null;
+let showPortfolioSupportLine = true;
 
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
@@ -383,6 +384,23 @@ function initPortfolioEventListeners() {
     privacyBtn.addEventListener("click", togglePrivacyMask);
   }
 
+  // Support floor line toggle
+  const toggleSupportBtn = document.getElementById("toggle-portfolio-support-btn");
+  if (toggleSupportBtn) {
+    toggleSupportBtn.addEventListener("click", () => {
+      showPortfolioSupportLine = !showPortfolioSupportLine;
+      updatePortfolioSupportBtnState();
+      if (portfolioForecastData) {
+        renderPortfolio60dChart(portfolioForecastData.portfolio_60d_daily, portfolioForecastData.current_portfolio_value);
+        renderPortfolio3yChart(portfolioForecastData.portfolio_3y_monthly);
+      }
+      showToast(
+        showPortfolioSupportLine ? "Portfolio Support Floor Visible" : "Portfolio Support Floor Hidden",
+        "info"
+      );
+    });
+  }
+
   // Recalculate button
   if (recalcBtn) {
     recalcBtn.addEventListener("click", () => {
@@ -674,6 +692,19 @@ function initPortfolioEventListeners() {
 }
 
 /**
+ * Updates Support Floor Toggle Button Styling
+ */
+function updatePortfolioSupportBtnState() {
+  const btn = document.getElementById("toggle-portfolio-support-btn");
+  if (!btn) return;
+  if (showPortfolioSupportLine) {
+    btn.className = "text-xs px-3 py-1.5 rounded-xl apple-glass text-rose-500 border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 transition font-semibold flex items-center space-x-1.5 shadow-sm shadow-rose-500/10";
+  } else {
+    btn.className = "text-xs px-3 py-1.5 rounded-xl apple-glass text-slate-400 dark:text-slate-500 border border-black/[0.06] dark:border-white/[0.08] hover:text-rose-500 transition font-semibold flex items-center space-x-1.5 opacity-60";
+  }
+}
+
+/**
  * Autocomplete for the portfolio ticker input field.
  */
 let portfolioAutocompleteIndex = -1;
@@ -902,6 +933,13 @@ function clearPortfolioForecastUI() {
   document.getElementById("portfolio-y3-val").textContent = "$0.00";
   document.getElementById("portfolio-cagr").textContent = "+0.00%";
 
+  const portSupportStat = document.getElementById("portfolio-support-floor-stat");
+  if (portSupportStat) portSupportStat.textContent = "$0.00";
+  const portCushionStat = document.getElementById("portfolio-support-cushion-stat");
+  if (portCushionStat) portCushionStat.textContent = "+0.0% downside buffer";
+  const headerSupportVal = document.getElementById("header-portfolio-support-val");
+  if (headerSupportVal) headerSupportVal.textContent = "$0.00";
+
   if (portfolio60dChart) {
     portfolio60dChart.destroy();
     portfolio60dChart = null;
@@ -1010,6 +1048,24 @@ function renderPortfolioDashboard(data) {
   document.getElementById("portfolio-y3-val").textContent = `$${s3y.year_3_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   document.getElementById("portfolio-cagr").textContent = `+${s3y.cagr_3y_pct.toFixed(2)}%`;
 
+  // Portfolio Critical Support Floor KPI & Pill
+  if (data.support_levels) {
+    const portFloorStat = document.getElementById("portfolio-support-floor-stat");
+    const portCushionStat = document.getElementById("portfolio-support-cushion-stat");
+    const headerSupportVal = document.getElementById("header-portfolio-support-val");
+
+    if (portFloorStat) {
+      portFloorStat.textContent = `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    }
+    if (portCushionStat) {
+      portCushionStat.textContent = `+${data.support_levels.cushion_pct.toFixed(1)}% downside buffer ($${data.support_levels.cushion_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+    }
+    if (headerSupportVal) {
+      headerSupportVal.textContent = `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    }
+    updatePortfolioSupportBtnState();
+  }
+
   renderHoldingsTable();
   renderPortfolio60dChart(data.portfolio_60d_daily, data.current_portfolio_value);
   populatePortfolioDailyTable(data.portfolio_60d_daily, data.current_portfolio_value);
@@ -1042,52 +1098,111 @@ function renderPortfolio60dChart(dailyPoints, currentVal) {
   const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
+  const chartDatasets = [
+    {
+      label: "Max (Upper Envelope)",
+      data: maxs,
+      borderColor: "rgba(99, 102, 241, 0.35)",
+      borderWidth: 1,
+      pointRadius: 0,
+      fill: "+1",
+      backgroundColor: dark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)",
+      tension: 0.25,
+    },
+    {
+      label: "Min (Lower Envelope)",
+      data: mins,
+      borderColor: "rgba(99, 102, 241, 0.35)",
+      borderWidth: 1,
+      pointRadius: 0,
+      fill: false,
+      tension: 0.25,
+    },
+    {
+      label: "Expected Portfolio Value",
+      data: means,
+      borderColor: "#6366f1",
+      borderWidth: 2.5,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      tension: 0.25,
+      fill: "start",
+      backgroundColor: (context) => {
+        const chart = context.chart;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return null;
+        const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        grad.addColorStop(0, dark ? "rgba(99, 102, 241, 0.22)" : "rgba(99, 102, 241, 0.10)");
+        grad.addColorStop(1, "rgba(99, 102, 241, 0.0)");
+        return grad;
+      },
+    },
+  ];
+
+  if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels) {
+    const floor = portfolioForecastData.support_levels.critical_support_floor;
+    chartDatasets.push({
+      label: `Portfolio Support Floor ($${floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
+      data: labels.map(() => floor),
+      borderColor: dark ? "rgba(244, 63, 94, 0.9)" : "rgba(225, 29, 72, 0.9)",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      fill: false,
+      tension: 0,
+    });
+  }
+
+  const portfolioSupportBadgePlugin = {
+    id: "portfolioSupportBadgePlugin",
+    afterDraw: (chart) => {
+      if (!showPortfolioSupportLine || !portfolioForecastData || !portfolioForecastData.support_levels) return;
+      const floor = portfolioForecastData.support_levels.critical_support_floor;
+      const yScale = chart.scales.y;
+      const xScale = chart.scales.x;
+      if (!yScale || !xScale) return;
+
+      const yPixel = yScale.getPixelForValue(floor);
+      if (yPixel < yScale.top || yPixel > yScale.bottom) return;
+
+      const c = chart.ctx;
+      c.save();
+      const badgeText = `🛡️ PORTFOLIO FLOOR: $${floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      c.font = "bold 10px Inter, -apple-system, sans-serif";
+      const metrics = c.measureText(badgeText);
+      const textWidth = metrics.width;
+      const padX = 7;
+      const badgeW = textWidth + padX * 2;
+      const badgeH = 19;
+      const badgeX = xScale.right - badgeW - 8;
+      const badgeY = yPixel - badgeH / 2;
+
+      // Draw badge background
+      c.fillStyle = dark ? "rgba(15, 23, 42, 0.92)" : "rgba(255, 255, 255, 0.94)";
+      c.strokeStyle = dark ? "rgba(244, 63, 94, 0.85)" : "rgba(225, 29, 72, 0.85)";
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+      c.fill();
+      c.stroke();
+
+      // Text inside badge
+      c.fillStyle = dark ? "#fda4af" : "#be123c";
+      c.textAlign = "left";
+      c.textBaseline = "middle";
+      c.fillText(badgeText, badgeX + padX, yPixel);
+      c.restore();
+    }
+  };
+
   portfolio60dChart = new Chart(ctx, {
     type: "line",
-    plugins: [getCrosshairPlugin(dark)],
+    plugins: [getCrosshairPlugin(dark), portfolioSupportBadgePlugin],
     data: {
       labels: labels,
-      datasets: [
-        {
-          label: "Max (Upper Envelope)",
-          data: maxs,
-          borderColor: "rgba(99, 102, 241, 0.35)",
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: "+1",
-          backgroundColor: dark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)",
-          tension: 0.25,
-        },
-        {
-          label: "Min (Lower Envelope)",
-          data: mins,
-          borderColor: "rgba(99, 102, 241, 0.35)",
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: false,
-          tension: 0.25,
-        },
-        {
-          label: "Expected Portfolio Value",
-          data: means,
-          borderColor: "#6366f1",
-          borderWidth: 2.5,
-          borderDash: [5, 4],
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          tension: 0.25,
-          fill: "start",
-          backgroundColor: (context) => {
-            const chart = context.chart;
-            const { ctx, chartArea } = chart;
-            if (!chartArea) return null;
-            const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            grad.addColorStop(0, dark ? "rgba(99, 102, 241, 0.22)" : "rgba(99, 102, 241, 0.10)");
-            grad.addColorStop(1, "rgba(99, 102, 241, 0.0)");
-            return grad;
-          },
-        },
-      ],
+      datasets: chartDatasets,
     },
     options: {
       responsive: true,
@@ -1189,41 +1304,57 @@ function renderPortfolio3yChart(monthlyPoints) {
   const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
+  const datasets3y = [
+    {
+      label: "Monthly Max",
+      data: maxs,
+      borderColor: "rgba(16, 185, 129, 0.6)",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      fill: "+1",
+      backgroundColor: dark ? "rgba(99, 102, 241, 0.12)" : "rgba(99, 102, 241, 0.06)",
+      tension: 0.3,
+    },
+    {
+      label: "Monthly Min",
+      data: mins,
+      borderColor: "rgba(244, 63, 94, 0.6)",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      fill: false,
+      tension: 0.3,
+    },
+    {
+      label: "Monthly Expected Mean",
+      data: means,
+      borderColor: "#6366f1",
+      borderWidth: 2.5,
+      pointRadius: 3,
+      pointBackgroundColor: "#818cf8",
+      tension: 0.3,
+    },
+  ];
+
+  if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels) {
+    const floor3y = portfolioForecastData.support_levels.monthly_support_floor;
+    datasets3y.push({
+      label: `3Y Structural Support Floor ($${floor3y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
+      data: labels.map(() => floor3y),
+      borderColor: dark ? "rgba(244, 63, 94, 0.9)" : "rgba(225, 29, 72, 0.9)",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+    });
+  }
+
   portfolio3yChart = new Chart(ctx, {
     type: "line",
     plugins: [getCrosshairPlugin(dark)],
     data: {
       labels: labels,
-      datasets: [
-        {
-          label: "Monthly Max",
-          data: maxs,
-          borderColor: "rgba(16, 185, 129, 0.6)",
-          borderWidth: 1.5,
-          pointRadius: 2,
-          fill: "+1",
-          backgroundColor: dark ? "rgba(99, 102, 241, 0.12)" : "rgba(99, 102, 241, 0.06)",
-          tension: 0.3,
-        },
-        {
-          label: "Monthly Min",
-          data: mins,
-          borderColor: "rgba(244, 63, 94, 0.6)",
-          borderWidth: 1.5,
-          pointRadius: 2,
-          fill: false,
-          tension: 0.3,
-        },
-        {
-          label: "Monthly Expected Mean",
-          data: means,
-          borderColor: "#6366f1",
-          borderWidth: 2.5,
-          pointRadius: 3,
-          pointBackgroundColor: "#818cf8",
-          tension: 0.3,
-        },
-      ],
+      datasets: datasets3y,
     },
     options: {
       responsive: true,

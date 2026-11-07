@@ -16,6 +16,7 @@ let currentData = null;                 // Cached forecast payload from backend
 let currentTicker = "AAPL";             // Active stock ticker
 let selectedModel = "ensemble";         // Active model: 'ensemble', 'gbdt', or 'ridge'
 let selectedHistoryWeeks = 104;         // Active history timeframe: 104 (default), 52, 26, or 'all'
+let showSupportLine = true;             // Dynamic support level floor toggle state
 
 // Chart.js instances
 let forecastChart = null;
@@ -252,6 +253,24 @@ function initEventListeners() {
       }
     });
   });
+
+  // Support Floor Line Toggle Button
+  const toggleSupportBtn = document.getElementById("toggle-support-line-btn");
+  if (toggleSupportBtn) {
+    toggleSupportBtn.addEventListener("click", () => {
+      showSupportLine = !showSupportLine;
+      updateSupportLineButtonState();
+      if (currentData) {
+        const modelPayload = currentData.models_comparison[selectedModel] || currentData.models_comparison["ensemble"];
+        renderForecastChart(currentData.historical_points, modelPayload.daily);
+        renderMonthlyForecast(currentData.forecast_3y_monthly);
+      }
+      showToast(
+        showSupportLine ? "Support Floor Line Visible" : "Support Floor Line Hidden",
+        "info"
+      );
+    });
+  }
 
   // Methodology drawer toggle
   const toggleMethodBtn = document.getElementById("toggle-methodology-btn");
@@ -608,6 +627,22 @@ async function fetchForecast(ticker) {
 }
 
 /**
+ * Updates Support Floor button and legend styling based on showSupportLine state.
+ */
+function updateSupportLineButtonState() {
+  const btn = document.getElementById("toggle-support-line-btn");
+  const legend = document.getElementById("chart-support-legend");
+  if (!btn) return;
+  if (showSupportLine) {
+    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full apple-glass text-xs font-semibold text-rose-500 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition shadow-sm";
+    if (legend) legend.classList.remove("opacity-25");
+  } else {
+    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full apple-glass text-xs font-medium text-slate-400 border border-black/[0.08] dark:border-white/[0.08] hover:text-slate-600 dark:hover:text-slate-200 transition shadow-sm";
+    if (legend) legend.classList.add("opacity-25");
+  }
+}
+
+/**
  * Renders all dashboard statistics and visual components.
  */
 function renderDashboard(data) {
@@ -622,6 +657,18 @@ function renderDashboard(data) {
   }
 
   document.getElementById("calc-time").textContent = `Processed in ${data.execution_time_ms}ms`;
+
+  // Support Floor Defense Metrics
+  if (data.support_levels) {
+    const sl = data.support_levels;
+    const floorElem = document.getElementById("stat-support-floor");
+    const cushionElem = document.getElementById("stat-support-cushion");
+    const headerPriceElem = document.getElementById("header-support-price");
+    if (floorElem) floorElem.textContent = `$${sl.critical_support_floor.toFixed(2)}`;
+    if (cushionElem) cushionElem.textContent = `+${sl.cushion_pct.toFixed(1)}%`;
+    if (headerPriceElem) headerPriceElem.textContent = `$${sl.critical_support_floor.toFixed(2)}`;
+    updateSupportLineButtonState();
+  }
 
   const quote = data.quote;
   document.getElementById("current-price").textContent = `$${quote.price.toFixed(2)}`;
@@ -917,60 +964,122 @@ function renderForecastChart(historical, dailyForecast) {
     }
   };
 
+  const supportBadgePlugin = {
+    id: "supportBadgePlugin",
+    afterDraw: (chart) => {
+      if (!showSupportLine || !currentData || !currentData.support_levels) return;
+      const floor = currentData.support_levels.critical_support_floor;
+      const yScale = chart.scales.y;
+      const xScale = chart.scales.x;
+      if (!yScale || !xScale) return;
+
+      const yPixel = yScale.getPixelForValue(floor);
+      if (yPixel < yScale.top || yPixel > yScale.bottom) return;
+
+      const c = chart.ctx;
+      c.save();
+      const badgeText = `🛡️ SUPPORT FLOOR: $${floor.toFixed(2)}`;
+      c.font = "bold 10px Inter, -apple-system, sans-serif";
+      const metrics = c.measureText(badgeText);
+      const textWidth = metrics.width;
+      const padX = 7;
+      const badgeW = textWidth + padX * 2;
+      const badgeH = 19;
+      const badgeX = xScale.right - badgeW - 8;
+      const badgeY = yPixel - badgeH / 2;
+
+      // Draw badge background
+      c.fillStyle = dark ? "rgba(15, 23, 42, 0.92)" : "rgba(255, 255, 255, 0.94)";
+      c.strokeStyle = dark ? "rgba(244, 63, 94, 0.85)" : "rgba(225, 29, 72, 0.85)";
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+      c.fill();
+      c.stroke();
+
+      // Text inside badge
+      c.fillStyle = dark ? "#fda4af" : "#be123c";
+      c.textAlign = "left";
+      c.textBaseline = "middle";
+      c.fillText(badgeText, badgeX + padX, yPixel);
+      c.restore();
+    }
+  };
+
+  const chartDatasets = [
+    {
+      label: "Historical Close",
+      data: histPoints,
+      borderColor: "#06b6d4",
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.15,
+      fill: "start",
+      backgroundColor: (context) => {
+        const chart = context.chart;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return null;
+        const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        grad.addColorStop(0, dark ? "rgba(6, 182, 212, 0.22)" : "rgba(6, 182, 212, 0.12)");
+        grad.addColorStop(1, "rgba(6, 182, 212, 0.0)");
+        return grad;
+      },
+    },
+    {
+      label: "Predicted Max (Upper Bound)",
+      data: maxPoints,
+      borderColor: "rgba(99, 102, 241, 0.35)",
+      borderWidth: 1,
+      pointRadius: 0,
+      fill: "+1",
+      backgroundColor: dark ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.08)",
+      tension: 0.25,
+    },
+    {
+      label: "Predicted Min (Lower Bound)",
+      data: minPoints,
+      borderColor: "rgba(99, 102, 241, 0.35)",
+      borderWidth: 1,
+      pointRadius: 0,
+      fill: false,
+      tension: 0.25,
+    },
+    {
+      label: "Predicted Mean Path",
+      data: meanPoints,
+      borderColor: "#6366f1",
+      borderWidth: 2.5,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      tension: 0.25,
+    },
+  ];
+
+  if (showSupportLine && currentData && currentData.support_levels) {
+    const floor = currentData.support_levels.critical_support_floor;
+    chartDatasets.push({
+      label: `Critical Support Floor ($${floor.toFixed(2)})`,
+      data: [
+        { x: 0, y: floor, date: "Floor Baseline", seriesLabel: `Critical Support Floor ($${floor.toFixed(2)})` },
+        { x: 100, y: floor, date: "30D Horizon", seriesLabel: `Critical Support Floor ($${floor.toFixed(2)})` }
+      ],
+      borderColor: dark ? "rgba(244, 63, 94, 0.95)" : "rgba(225, 29, 72, 0.95)",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      fill: false,
+      tension: 0,
+    });
+  }
+
   forecastChart = new Chart(ctx, {
     type: "line",
-    plugins: [forecastDividerPlugin, getCrosshairPlugin(dark)],
+    plugins: [forecastDividerPlugin, getCrosshairPlugin(dark), supportBadgePlugin],
     data: {
-      datasets: [
-        {
-          label: "Historical Close",
-          data: histPoints,
-          borderColor: "#06b6d4",
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          tension: 0.15,
-          fill: "start",
-          backgroundColor: (context) => {
-            const chart = context.chart;
-            const { ctx, chartArea } = chart;
-            if (!chartArea) return null;
-            const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            grad.addColorStop(0, dark ? "rgba(6, 182, 212, 0.22)" : "rgba(6, 182, 212, 0.12)");
-            grad.addColorStop(1, "rgba(6, 182, 212, 0.0)");
-            return grad;
-          },
-        },
-        {
-          label: "Predicted Max (Upper Bound)",
-          data: maxPoints,
-          borderColor: "rgba(99, 102, 241, 0.35)",
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: "+1",
-          backgroundColor: dark ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.08)",
-          tension: 0.25,
-        },
-        {
-          label: "Predicted Min (Lower Bound)",
-          data: minPoints,
-          borderColor: "rgba(99, 102, 241, 0.35)",
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: false,
-          tension: 0.25,
-        },
-        {
-          label: "Predicted Mean Path",
-          data: meanPoints,
-          borderColor: "#6366f1",
-          borderWidth: 2.5,
-          borderDash: [5, 4],
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          tension: 0.25,
-        },
-      ],
+      datasets: chartDatasets,
     },
     options: {
       responsive: true,
@@ -1080,41 +1189,57 @@ function renderMonthlyForecast(monthlyRes) {
   const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
+  const monthlyDatasets = [
+    {
+      label: "Monthly Max",
+      data: maxs,
+      borderColor: "rgba(16, 185, 129, 0.6)",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      fill: "+1",
+      backgroundColor: dark ? "rgba(99, 102, 241, 0.10)" : "rgba(99, 102, 241, 0.06)",
+      tension: 0.3,
+    },
+    {
+      label: "Monthly Min",
+      data: mins,
+      borderColor: "rgba(244, 63, 94, 0.6)",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      fill: false,
+      tension: 0.3,
+    },
+    {
+      label: "Monthly Expected Mean",
+      data: means,
+      borderColor: "#6366f1",
+      borderWidth: 2.5,
+      pointRadius: 3,
+      pointBackgroundColor: "#818cf8",
+      tension: 0.3,
+    },
+  ];
+
+  if (showSupportLine && currentData && currentData.support_levels) {
+    const floor3y = currentData.support_levels.monthly_support_floor;
+    monthlyDatasets.push({
+      label: `3Y Structural Support Floor ($${floor3y.toFixed(2)})`,
+      data: labels.map(() => floor3y),
+      borderColor: dark ? "rgba(244, 63, 94, 0.9)" : "rgba(225, 29, 72, 0.9)",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+    });
+  }
+
   monthlyChart = new Chart(ctx, {
     type: "line",
     plugins: [getCrosshairPlugin(dark)],
     data: {
       labels: labels,
-      datasets: [
-        {
-          label: "Monthly Max",
-          data: maxs,
-          borderColor: "rgba(16, 185, 129, 0.6)",
-          borderWidth: 1.5,
-          pointRadius: 2,
-          fill: "+1",
-          backgroundColor: dark ? "rgba(99, 102, 241, 0.10)" : "rgba(99, 102, 241, 0.06)",
-          tension: 0.3,
-        },
-        {
-          label: "Monthly Min",
-          data: mins,
-          borderColor: "rgba(244, 63, 94, 0.6)",
-          borderWidth: 1.5,
-          pointRadius: 2,
-          fill: false,
-          tension: 0.3,
-        },
-        {
-          label: "Monthly Expected Mean",
-          data: means,
-          borderColor: "#6366f1",
-          borderWidth: 2.5,
-          pointRadius: 3,
-          pointBackgroundColor: "#818cf8",
-          tension: 0.3,
-        },
-      ],
+      datasets: monthlyDatasets,
     },
     options: {
       responsive: true,
