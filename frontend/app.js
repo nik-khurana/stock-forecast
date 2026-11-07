@@ -344,14 +344,14 @@ function initAutocomplete() {
       el.setAttribute("data-ticker", item.ticker);
       el.setAttribute("data-index", index);
 
-      const aliasesText = item.aliases ? item.aliases : "";
+      const aliasesText = item.aliases ? escapeHtml(item.aliases) : "";
 
       el.innerHTML = `
         <div class="flex flex-col pr-2 min-w-0">
-          <span class="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate">${item.name}</span>
+          <span class="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate">${escapeHtml(item.name)}</span>
           ${aliasesText ? `<span class="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-xs">${aliasesText}</span>` : ""}
         </div>
-        <span class="shrink-0 px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold font-mono">${item.ticker}</span>
+        <span class="shrink-0 px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold font-mono">${escapeHtml(item.ticker)}</span>
       `;
 
       el.addEventListener("mousedown", (e) => {

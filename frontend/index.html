@@ -101,9 +101,9 @@
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
     <!-- Hero Search Bar & Quick Ticker Buttons -->
-    <section class="space-y-4">
-      <div class="relative max-w-2xl mx-auto">
-        <form id="search-form" class="relative flex items-center">
+    <section class="space-y-4 relative z-30">
+      <div class="relative max-w-2xl mx-auto z-40">
+        <form id="search-form" class="relative flex items-center z-50">
           <div class="absolute left-4 pointer-events-none text-slate-400">
             <i data-lucide="search" class="w-4 h-4"></i>
           </div>
@@ -124,7 +124,7 @@
           </button>
 
           <!-- Autocomplete Dropdown List -->
-          <div id="autocomplete-dropdown" class="hidden absolute top-full left-0 right-0 mt-2 p-1.5 apple-glass rounded-2xl shadow-2xl max-h-80 overflow-y-auto z-50 divide-y divide-black/[0.04] dark:divide-white/[0.06]"></div>
+          <div id="autocomplete-dropdown" class="hidden absolute top-full left-0 right-0 mt-2 p-1.5 bg-white/95 dark:bg-[#000000]/95 backdrop-blur-2xl apple-glass rounded-2xl shadow-2xl max-h-80 overflow-y-auto z-50 divide-y divide-black/[0.04] dark:divide-white/[0.06] border border-black/[0.08] dark:border-white/[0.12]"></div>
         </form>
       </div>
 

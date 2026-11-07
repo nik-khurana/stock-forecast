@@ -711,8 +711,8 @@ function initPortfolioAutocomplete() {
       el.setAttribute("data-ticker", item.ticker);
       el.setAttribute("data-index", idx);
       el.innerHTML = `
-        <span class="font-medium text-slate-800 dark:text-slate-100 truncate">${item.name}</span>
-        <span class="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-500 font-bold font-mono text-[11px]">${item.ticker}</span>
+        <span class="font-medium text-slate-800 dark:text-slate-100 truncate">${escapeHtml(item.name)}</span>
+        <span class="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-500 font-bold font-mono text-[11px]">${escapeHtml(item.ticker)}</span>
       `;
 
       el.addEventListener("mousedown", (e) => {
