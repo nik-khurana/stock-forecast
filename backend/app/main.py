@@ -36,6 +36,7 @@ from backend.app.config import (
 )
 from backend.app.alpaca_client import AlpacaClient
 from backend.app.forecast_service import ForecastService
+from backend.app.company_database import search_companies, resolve_ticker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -135,28 +136,20 @@ def health():
 @app.get("/api/search")
 def search_tickers(q: str = Query("", description="Ticker symbol or company name prefix")):
     """
-    Autocomplete search endpoint for stock tickers.
+    Autocomplete search endpoint supporting company names, ticker symbols, and brand aliases.
     """
-    query = q.strip().upper()
-    if not query:
-        return {"results": POPULAR_TICKERS}
-    
-    matches = [
-        t for t in POPULAR_TICKERS
-        if query in t["ticker"] or query in t["name"].upper()
-    ]
-    if not matches and TICKER_REGEX.match(query):
-        matches = [{"ticker": query, "name": f"{query} Common Stock"}]
-    return {"results": matches}
+    results = search_companies(q, limit=12)
+    return {"results": results}
 
 @app.get("/api/stock/{ticker}/overview")
 def get_stock_overview(ticker: str, request: Request):
     """
-    Fetches the latest market quote snapshot for a ticker.
+    Fetches the latest market quote snapshot for a ticker (or company name).
     """
     client_ip = request.client.host if request.client else "127.0.0.1"
     enforce_rate_limit(client_ip)
-    clean_ticker = validate_ticker(ticker)
+    resolved = resolve_ticker(ticker)
+    clean_ticker = validate_ticker(resolved)
 
     try:
         quote = alpaca_client.get_latest_quote(clean_ticker)
@@ -179,10 +172,12 @@ def get_forecast(
     Master ML Forecast endpoint.
     Retrieves 3 years of data from Alpaca, builds features, trains the chosen model,
     and returns 30-day daily points + 3-year monthly breakdown.
+    Supports ticker symbols (AAPL) and company names (Apple).
     """
     client_ip = request.client.host if request.client else "127.0.0.1"
     enforce_rate_limit(client_ip)
-    clean_ticker = validate_ticker(ticker)
+    resolved = resolve_ticker(ticker)
+    clean_ticker = validate_ticker(resolved)
 
     try:
         result = forecast_service.generate_forecast(clean_ticker, selected_model=model)

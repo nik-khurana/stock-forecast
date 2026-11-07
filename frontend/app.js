@@ -140,12 +140,16 @@ function isDarkMode() {
 function initEventListeners() {
   const searchForm = document.getElementById("search-form");
   const tickerInput = document.getElementById("ticker-input");
+  const dropdown = document.getElementById("autocomplete-dropdown");
+
+  initAutocomplete();
 
   searchForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const ticker = tickerInput.value.trim().toUpperCase();
-    if (ticker) {
-      fetchForecast(ticker);
+    if (dropdown) dropdown.classList.add("hidden");
+    const query = tickerInput.value.trim();
+    if (query) {
+      fetchForecast(query);
     }
   });
 
@@ -154,6 +158,7 @@ function initEventListeners() {
     btn.addEventListener("click", () => {
       const ticker = btn.getAttribute("data-ticker");
       tickerInput.value = ticker;
+      if (dropdown) dropdown.classList.add("hidden");
       fetchForecast(ticker);
     });
   });
@@ -247,6 +252,139 @@ function initEventListeners() {
 }
 
 /**
+ * Company Name & Ticker Autocomplete with Keyboard Navigation
+ */
+let currentAutocompleteIndex = -1;
+let autocompleteDebounceTimer = null;
+
+function initAutocomplete() {
+  const tickerInput = document.getElementById("ticker-input");
+  const dropdown = document.getElementById("autocomplete-dropdown");
+  if (!tickerInput || !dropdown) return;
+
+  async function performSearch(query) {
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      renderDropdown(data.results || []);
+    } catch (err) {
+      console.error("Autocomplete fetch error:", err);
+    }
+  }
+
+  function renderDropdown(items) {
+    dropdown.innerHTML = "";
+    currentAutocompleteIndex = -1;
+
+    if (!items || items.length === 0) {
+      dropdown.classList.add("hidden");
+      return;
+    }
+
+    items.forEach((item, index) => {
+      const el = document.createElement("div");
+      el.className =
+        "autocomplete-item px-3.5 py-2.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.08] cursor-pointer flex items-center justify-between transition group";
+      el.setAttribute("data-ticker", item.ticker);
+      el.setAttribute("data-index", index);
+
+      const aliasesText = item.aliases ? item.aliases : "";
+
+      el.innerHTML = `
+        <div class="flex flex-col pr-2 min-w-0">
+          <span class="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate">${item.name}</span>
+          ${aliasesText ? `<span class="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-xs">${aliasesText}</span>` : ""}
+        </div>
+        <span class="shrink-0 px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold font-mono">${item.ticker}</span>
+      `;
+
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectItem(item.ticker);
+      });
+
+      dropdown.appendChild(el);
+    });
+
+    dropdown.classList.remove("hidden");
+  }
+
+  function selectItem(ticker) {
+    tickerInput.value = ticker;
+    dropdown.classList.add("hidden");
+    currentAutocompleteIndex = -1;
+    fetchForecast(ticker);
+  }
+
+  function highlightItem(index) {
+    const items = dropdown.querySelectorAll(".autocomplete-item");
+    items.forEach((it, i) => {
+      if (i === index) {
+        it.classList.add("bg-indigo-500/15", "dark:bg-indigo-500/20");
+        it.scrollIntoView({ block: "nearest" });
+      } else {
+        it.classList.remove("bg-indigo-500/15", "dark:bg-indigo-500/20");
+      }
+    });
+  }
+
+  tickerInput.addEventListener("input", (e) => {
+    clearTimeout(autocompleteDebounceTimer);
+    const val = e.target.value.trim();
+    if (!val) {
+      dropdown.classList.add("hidden");
+      return;
+    }
+    autocompleteDebounceTimer = setTimeout(() => {
+      performSearch(val);
+    }, 150);
+  });
+
+  tickerInput.addEventListener("focus", () => {
+    const val = tickerInput.value.trim();
+    performSearch(val);
+  });
+
+  tickerInput.addEventListener("keydown", (e) => {
+    if (dropdown.classList.contains("hidden")) return;
+    const items = dropdown.querySelectorAll(".autocomplete-item");
+    if (!items.length) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      currentAutocompleteIndex = (currentAutocompleteIndex + 1) % items.length;
+      highlightItem(currentAutocompleteIndex);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      currentAutocompleteIndex = (currentAutocompleteIndex - 1 + items.length) % items.length;
+      highlightItem(currentAutocompleteIndex);
+    } else if (e.key === "Enter") {
+      if (currentAutocompleteIndex >= 0 && currentAutocompleteIndex < items.length) {
+        e.preventDefault();
+        const selectedTicker = items[currentAutocompleteIndex].getAttribute("data-ticker");
+        if (selectedTicker) {
+          selectItem(selectedTicker);
+        }
+      }
+    } else if (e.key === "Escape") {
+      dropdown.classList.add("hidden");
+      currentAutocompleteIndex = -1;
+    }
+  });
+
+  // Dismiss dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    const searchForm = document.getElementById("search-form");
+    if (searchForm && !searchForm.contains(e.target)) {
+      dropdown.classList.add("hidden");
+      currentAutocompleteIndex = -1;
+    }
+  });
+}
+
+
+/**
  * Attaches CSV Export Click Handlers.
  */
 function initCSVExportListeners() {
@@ -317,7 +455,6 @@ async function checkHealth() {
  * Asynchronously fetches stock forecast from FastAPI backend.
  */
 async function fetchForecast(ticker) {
-  currentTicker = ticker.toUpperCase();
   const loading = document.getElementById("loading-spinner");
   const content = document.getElementById("dashboard-content");
 
@@ -325,22 +462,26 @@ async function fetchForecast(ticker) {
   content.classList.add("opacity-30");
 
   try {
-    const res = await fetch(`/api/stock/${currentTicker}/forecast?model=${selectedModel}`);
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/forecast?model=${selectedModel}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.detail || `API returned HTTP ${res.status}`);
     }
     const data = await res.json();
     currentData = data;
+    currentTicker = data.ticker;
 
     // Deep Linking: Update browser URL bar (?ticker=XYZ) without reloading
     window.history.pushState({}, '', `?ticker=${currentTicker}`);
 
     renderDashboard(data);
-    showToast(`Loaded live data for ${currentTicker}`, "success");
+    const toastMsg = data.company_name
+      ? `Loaded live data for ${data.company_name} (${currentTicker})`
+      : `Loaded live data for ${currentTicker}`;
+    showToast(toastMsg, "success");
   } catch (err) {
     console.error("Forecast fetch error:", err);
-    showToast(err.message || `Could not fetch forecast for ${currentTicker}`, "error");
+    showToast(err.message || `Could not fetch forecast for ${ticker}`, "error");
   } finally {
     loading.classList.add("hidden");
     content.classList.remove("opacity-30");
@@ -352,6 +493,15 @@ async function fetchForecast(ticker) {
  */
 function renderDashboard(data) {
   document.getElementById("stock-ticker").textContent = data.ticker;
+  const companyElem = document.getElementById("company-name");
+  if (companyElem) {
+    companyElem.textContent = data.company_name || "";
+  }
+  const tickerInput = document.getElementById("ticker-input");
+  if (tickerInput) {
+    tickerInput.value = data.ticker;
+  }
+
   document.getElementById("calc-time").textContent = `Processed in ${data.execution_time_ms}ms`;
 
   const quote = data.quote;
@@ -452,6 +602,53 @@ function renderDashboard(data) {
     document.getElementById("stat-sma50").textContent = `${sign50}${diff50}%`;
     document.getElementById("stat-sma50").className =
       diff50 >= 0 ? "text-lg font-bold text-emerald-500 mt-1 block" : "text-lg font-bold text-rose-500 mt-1 block";
+  }
+
+  // Dynamic Model Recommendation Card & Auto-Selection of Preferred Model
+  if (data.model_recommendation) {
+    const rec = data.model_recommendation;
+    const labelElem = document.getElementById("rec-model-label");
+    const badgeElem = document.getElementById("rec-divergence-badge");
+    const reasonElem = document.getElementById("rec-reasoning-text");
+    const noteElem = document.getElementById("rec-divergence-note");
+
+    if (labelElem) {
+      labelElem.textContent = rec.label;
+      if (rec.badge_color === "amber") {
+        labelElem.className =
+          "px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-bold";
+      } else if (rec.badge_color === "cyan") {
+        labelElem.className =
+          "px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 text-xs font-bold";
+      } else {
+        labelElem.className =
+          "px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold";
+      }
+    }
+
+    if (badgeElem) {
+      badgeElem.textContent = `Model Divergence: ${rec.divergence_pct}%`;
+      if (rec.divergence_pct >= 5.0) {
+        badgeElem.className =
+          "text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium";
+      } else {
+        badgeElem.className =
+          "text-[11px] px-2.5 py-0.5 rounded-full bg-black/[0.03] dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 font-medium";
+      }
+    }
+
+    if (reasonElem) reasonElem.textContent = rec.reasoning;
+    if (noteElem) noteElem.textContent = rec.divergence_note;
+
+    // Automatically set the preferred model as default for this stock
+    selectedModel = rec.model;
+    document.querySelectorAll(".model-tab").forEach((tab) => {
+      if (tab.getAttribute("data-model") === rec.model) {
+        tab.classList.add("active");
+      } else {
+        tab.classList.remove("active");
+      }
+    });
   }
 
   updateModelView();
