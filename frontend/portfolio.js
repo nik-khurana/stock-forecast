@@ -1105,8 +1105,14 @@ function renderPortfolioDashboard(data) {
         : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500";
     }
 
-    const profitSign = s60.expected_profit_60d >= 0 ? "+" : "";
-    setTxt("portfolio-60d-profit", `${profitSign}$${Math.abs(s60.expected_profit_60d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Expected gain (60D)`);
+    const isProfitPos = s60.expected_profit_60d >= 0;
+    const profitSign = isProfitPos ? "+" : "-";
+    const profitLabel = isProfitPos ? "Expected gain (60D)" : "Expected loss (60D)";
+    const profitColor = isProfitPos ? "text-slate-500 dark:text-slate-400" : "text-rose-500 dark:text-rose-400";
+    const profitElem = setTxt("portfolio-60d-profit", `${profitSign}$${Math.abs(s60.expected_profit_60d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${profitLabel}`);
+    if (profitElem) {
+      profitElem.className = `text-xs font-medium ${profitColor} privacy-value`;
+    }
 
     setTxt("portfolio-60d-min", `$${Math.round(s60.predicted_min).toLocaleString()}`);
     setTxt("portfolio-60d-max", `$${Math.round(s60.predicted_max).toLocaleString()}`);
@@ -1118,7 +1124,15 @@ function renderPortfolioDashboard(data) {
     setTxt("portfolio-y1-val", `$${s3y.year_1_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
     setTxt("portfolio-y2-val", `$${s3y.year_2_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
     setTxt("portfolio-y3-val", `$${s3y.year_3_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-    setTxt("portfolio-cagr", `+${s3y.cagr_3y_pct.toFixed(2)}%`);
+    
+    const isCagrPos = s3y.cagr_3y_pct >= 0;
+    const cagrSign = isCagrPos ? "+" : "";
+    const cagrElem = setTxt("portfolio-cagr", `${cagrSign}${s3y.cagr_3y_pct.toFixed(2)}%`);
+    if (cagrElem) {
+      cagrElem.className = isCagrPos
+        ? "text-xs font-semibold text-emerald-500"
+        : "text-xs font-semibold text-rose-500";
+    }
   }
 
   // Portfolio Critical Support Floor KPI & Pill

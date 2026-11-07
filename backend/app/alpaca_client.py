@@ -299,25 +299,38 @@ class AlpacaClient:
         seed = sum(ord(c) for c in ticker) % 10000
         rng = np.random.RandomState(seed)
 
-        ticker_baselines = {
-            "AAPL": 150.0,
-            "NVDA": 80.0,
-            "MSFT": 280.0,
-            "TSLA": 200.0,
-            "GOOGL": 120.0,
-            "AMZN": 110.0,
-            "SPY": 420.0,
-            "META": 250.0
+        ticker_profiles = {
+            "NVDA": {"base": 80.0, "drift": 0.45, "vol": 0.40},
+            "META": {"base": 250.0, "drift": 0.30, "vol": 0.35},
+            "AAPL": {"base": 150.0, "drift": 0.12, "vol": 0.22},
+            "MSFT": {"base": 280.0, "drift": 0.15, "vol": 0.22},
+            "TSLA": {"base": 200.0, "drift": 0.10, "vol": 0.45},
+            "GOOGL": {"base": 120.0, "drift": 0.14, "vol": 0.25},
+            "AMZN": {"base": 110.0, "drift": 0.16, "vol": 0.28},
+            "SPY": {"base": 420.0, "drift": 0.10, "vol": 0.16},
+            "INTC": {"base": 50.0, "drift": -0.18, "vol": 0.32},
+            "NKE": {"base": 120.0, "drift": -0.22, "vol": 0.28},
+            "BA": {"base": 210.0, "drift": -0.08, "vol": 0.32},
+            "PFE": {"base": 45.0, "drift": -0.15, "vol": 0.22},
+            "WBA": {"base": 35.0, "drift": -0.28, "vol": 0.35},
         }
-        start_price = ticker_baselines.get(ticker, 100.0)
+
+        profile = ticker_profiles.get(ticker)
+        if profile:
+            start_price = profile["base"]
+            annual_drift = profile["drift"]
+            annual_vol = profile["vol"]
+        else:
+            start_price = 100.0
+            # Allow diverse market regimes including bear/stagnant regimes (-18% to +22%)
+            annual_drift = -0.18 + (seed % 40) * 0.01
+            annual_vol = 0.20 + (seed % 15) * 0.015
 
         end_date = datetime.now(timezone.utc).date()
         start_date = end_date - timedelta(days=int(365.25 * years) + 15)
         all_dates = pd.date_range(start=start_date, end=end_date, freq="B")  # Business days
 
         n_days = len(all_dates)
-        annual_drift = 0.12 + (seed % 10) * 0.01
-        annual_vol = 0.25 + (seed % 8) * 0.015
         dt = 1.0 / 252.0
 
         daily_returns = rng.normal((annual_drift - 0.5 * annual_vol**2) * dt, annual_vol * np.sqrt(dt), n_days)
