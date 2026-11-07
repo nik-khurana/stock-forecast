@@ -683,6 +683,97 @@ function initVisibilityListener() {
   });
 }
 
+let stockAnalysisTimer = null;
+let stockAnalysisSeconds = 0;
+
+function startStockAnalysisAnimation(ticker, model) {
+  const banner = document.getElementById("stock-analysis-banner");
+  const title = document.getElementById("stock-analysis-title");
+  const timer = document.getElementById("stock-analysis-timer");
+  const stage = document.getElementById("stock-analysis-stage");
+  const chartLoading = document.getElementById("single-chart-loading");
+  const predictBtn = document.getElementById("predict-btn");
+  const content = document.getElementById("dashboard-content");
+
+  if (banner) banner.classList.remove("hidden");
+  if (chartLoading) chartLoading.classList.remove("hidden");
+
+  // Highlight KPI cards with smooth shimmer
+  if (content) {
+    content.querySelectorAll(".apple-glass").forEach(el => el.classList.add("card-loading-shimmer"));
+  }
+
+  // Update predict button to loading state
+  if (predictBtn) {
+    predictBtn.classList.add("opacity-50", "pointer-events-none");
+    predictBtn.innerHTML = `
+      <div class="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+      <span>Analyzing...</span>
+    `;
+  }
+
+  const modelLabels = {
+    ensemble: "AI Ensemble (GBDT + Ridge)",
+    gbdt: "Quantile Gradient Boosted Trees",
+    ridge: "L2 Ridge Regression"
+  };
+  const modelName = modelLabels[model] || model;
+
+  if (title) {
+    title.textContent = `Analyzing ${ticker.toUpperCase()} with ${modelName}...`;
+  }
+
+  stockAnalysisSeconds = 0;
+  if (timer) timer.textContent = "0s";
+  if (stage) stage.textContent = "Ingesting Alpaca Daily Bars";
+
+  if (window.lucide) lucide.createIcons();
+
+  if (stockAnalysisTimer) clearInterval(stockAnalysisTimer);
+  stockAnalysisTimer = setInterval(() => {
+    stockAnalysisSeconds += 1;
+    if (timer) timer.textContent = `${stockAnalysisSeconds}s`;
+
+    if (stockAnalysisSeconds < 2) {
+      if (stage) stage.textContent = "Ingesting Alpaca Daily Bars & Quotes";
+    } else if (stockAnalysisSeconds < 4) {
+      if (stage) stage.textContent = "Engineering RSI-14, MACD & Volatility Signals";
+    } else if (stockAnalysisSeconds < 7) {
+      if (stage) stage.textContent = "Fitting Quantile GBDT & Ridge Models";
+    } else {
+      if (stage) stage.textContent = "Simulating 36-Month Volatility Diffusion & Support Floor";
+    }
+  }, 1000);
+}
+
+function stopStockAnalysisAnimation() {
+  if (stockAnalysisTimer) {
+    clearInterval(stockAnalysisTimer);
+    stockAnalysisTimer = null;
+  }
+
+  const banner = document.getElementById("stock-analysis-banner");
+  const chartLoading = document.getElementById("single-chart-loading");
+  const predictBtn = document.getElementById("predict-btn");
+  const content = document.getElementById("dashboard-content");
+
+  if (banner) banner.classList.add("hidden");
+  if (chartLoading) chartLoading.classList.add("hidden");
+
+  if (content) {
+    content.querySelectorAll(".apple-glass").forEach(el => el.classList.remove("card-loading-shimmer"));
+  }
+
+  if (predictBtn) {
+    predictBtn.classList.remove("opacity-50", "pointer-events-none");
+    predictBtn.innerHTML = `
+      <span>Forecast</span>
+      <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+    `;
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
 /**
  * Asynchronously fetches stock forecast from FastAPI backend with smooth skeleton shimmer.
  * When isBackgroundUpdate is true (10s live tick):
@@ -695,11 +786,12 @@ async function fetchForecast(ticker, isBackgroundUpdate = false) {
   const content = document.getElementById("dashboard-content");
 
   if (!isBackgroundUpdate) {
+    startStockAnalysisAnimation(ticker, selectedModel);
     if (!currentData && skeleton && content) {
       skeleton.classList.remove("hidden");
       content.classList.add("hidden");
     } else if (content) {
-      content.classList.add("opacity-40", "pointer-events-none");
+      content.classList.add("opacity-50");
     }
   } else {
     isLiveStreamingUpdating = true;
@@ -748,9 +840,10 @@ async function fetchForecast(ticker, isBackgroundUpdate = false) {
     if (isBackgroundUpdate) {
       isLiveStreamingUpdating = false;
     } else {
+      stopStockAnalysisAnimation();
       if (skeleton) skeleton.classList.add("hidden");
       if (content) {
-        content.classList.remove("hidden", "opacity-40", "pointer-events-none");
+        content.classList.remove("hidden", "opacity-50", "pointer-events-none");
         content.classList.add("fade-in");
       }
     }

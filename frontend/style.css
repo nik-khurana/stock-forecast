@@ -272,3 +272,98 @@ html:not(.dark) .skeleton-shimmer::after {
   }
 }
 
+/* ==========================================================================
+   Apple Glass AI Engine Loading & Progress Shimmer System
+   ========================================================================== */
+
+/* Indeterminate Moving Progress Bar */
+.indeterminate-progress-bar {
+  width: 50%;
+  animation: indeterminateProgress 1.8s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+  transform-origin: 0% 50%;
+}
+
+@keyframes indeterminateProgress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(60%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* Subtle Card Loading Shimmer */
+.card-loading-shimmer {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.card-loading-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 102, 241, 0.10) 50%,
+    transparent 100%
+  );
+  animation: cardShimmer 1.6s infinite;
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+html:not(.dark) .card-loading-shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 102, 241, 0.16) 50%,
+    transparent 100%
+  );
+}
+
+@keyframes cardShimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Dual Ring Orbital Spinners */
+.orbital-spinner-outer {
+  animation: spinSmooth 2s linear infinite;
+}
+
+.orbital-spinner-inner {
+  animation: spinReverse 1.4s linear infinite;
+}
+
+@keyframes spinSmooth {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinReverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* Chart Frosted Backdrop Overlay */
+.chart-loading-overlay {
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+}
+
+html:not(.dark) .chart-loading-overlay {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+

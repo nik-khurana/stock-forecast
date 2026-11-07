@@ -416,7 +416,7 @@ class ForecastService:
                 else:
                     bundles[tk] = bundle
 
-        # Step 3: Run ML models for each valid holding
+        # Step 3: Run ML models concurrently for each valid holding
         stock_daily_forecasts: Dict[str, List[Dict[str, Any]]] = {}
         stock_monthly_forecasts: Dict[str, List[Dict[str, Any]]] = {}
         stock_support_floors: Dict[str, float] = {}
@@ -424,18 +424,16 @@ class ForecastService:
         current_quotes: Dict[str, Any] = {}
         valid_holdings: List[Dict[str, Any]] = []
 
-        for h in normalized_holdings:
+        def _train_holding_models(h: Dict[str, Any]):
             tk = h["ticker"]
             if tk not in bundles:
-                continue
-
+                return None
             b = bundles[tk]
             bars_df = b.get("bars_df")
             quote = b.get("quote")
 
             if bars_df is None or bars_df.empty or not quote:
-                warnings.append(f"Symbol '{tk}': Insufficient price history to generate ML forecast.")
-                continue
+                return {"warning": f"Symbol '{tk}': Insufficient price history to generate ML forecast."}
 
             try:
                 current_price = quote["price"]
@@ -458,19 +456,39 @@ class ForecastService:
                 else:
                     chosen = ensemble_res
 
-                stock_daily_forecasts[tk] = chosen["daily_forecast"]
                 m_res = self.long_term_model.predict_36_months(bars_df, current_price, last_date)
-                stock_monthly_forecasts[tk] = m_res["monthly_forecast"]
-
                 sup_res = self.compute_support_levels(bars_df, current_price, chosen["daily_forecast"], m_res["monthly_forecast"])
-                stock_support_floors[tk] = sup_res["critical_support_floor"]
-                stock_monthly_support_floors[tk] = sup_res["monthly_support_floor"]
 
-                current_quotes[tk] = quote
-                valid_holdings.append(h)
+                return {
+                    "holding": h,
+                    "ticker": tk,
+                    "quote": quote,
+                    "daily_forecast": chosen["daily_forecast"],
+                    "monthly_forecast": m_res["monthly_forecast"],
+                    "support_floor": sup_res["critical_support_floor"],
+                    "monthly_support_floor": sup_res["monthly_support_floor"],
+                }
             except Exception as e:
                 logger.error("Error generating forecast for holding %s: %s", tk, e, exc_info=True)
-                warnings.append(f"Symbol '{tk}': Model training failed ({str(e)})")
+                return {"warning": f"Symbol '{tk}': Model training failed ({str(e)})"}
+
+        # Train models in parallel (up to 4 concurrent worker threads)
+        worker_count = max(1, min(len(normalized_holdings), 4))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            for outcome in executor.map(_train_holding_models, normalized_holdings):
+                if not outcome:
+                    continue
+                if "warning" in outcome:
+                    warnings.append(outcome["warning"])
+                    continue
+
+                tk = outcome["ticker"]
+                stock_daily_forecasts[tk] = outcome["daily_forecast"]
+                stock_monthly_forecasts[tk] = outcome["monthly_forecast"]
+                stock_support_floors[tk] = outcome["support_floor"]
+                stock_monthly_support_floors[tk] = outcome["monthly_support_floor"]
+                current_quotes[tk] = outcome["quote"]
+                valid_holdings.append(outcome["holding"])
 
         if not valid_holdings:
             err_detail = "; ".join(warnings) if warnings else "No valid stock positions could be processed."

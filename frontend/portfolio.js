@@ -1362,14 +1362,119 @@ function clearPortfolioForecastUI() {
  * - Runs silently in background without spinning buttons or toast spam.
  * - Smoothly updates chart points via chart.update('none').
  */
-async function fetchPortfolioForecast(isBackgroundUpdate = false) {
-  if (portfolioHoldings.length === 0) return;
+let portfolioAnalysisTimer = null;
+let portfolioAnalysisSeconds = 0;
 
+function startPortfolioLoadingAnimation() {
+  const banner = document.getElementById("portfolio-loading-banner");
+  const timerBadge = document.getElementById("portfolio-loading-timer-badge");
+  const statusText = document.getElementById("portfolio-loading-status-text");
+  const chart60dLoading = document.getElementById("portfolio-60d-chart-loading");
+  const chart3yLoading = document.getElementById("portfolio-3y-chart-loading");
+  const kpiSection = document.getElementById("portfolio-kpi-section");
   const recalcBtn = document.getElementById("portfolio-recalc-btn");
-  if (!isBackgroundUpdate && recalcBtn) {
+
+  if (banner) banner.classList.remove("hidden");
+  if (chart60dLoading) chart60dLoading.classList.remove("hidden");
+  if (chart3yLoading) chart3yLoading.classList.remove("hidden");
+
+  if (kpiSection) {
+    kpiSection.querySelectorAll(".apple-glass").forEach(card => card.classList.add("card-loading-shimmer"));
+  }
+
+  if (recalcBtn) {
     recalcBtn.classList.add("opacity-50", "pointer-events-none");
     const icon = recalcBtn.querySelector("i");
     if (icon) icon.classList.add("animate-spin");
+    const span = recalcBtn.querySelector("span");
+    if (span) span.textContent = "Calculating...";
+  }
+
+  if (window.lucide) lucide.createIcons();
+
+  portfolioAnalysisSeconds = 0;
+  if (timerBadge) timerBadge.textContent = "0s elapsed";
+
+  const stage1 = document.getElementById("stage-badge-1");
+  const stage2 = document.getElementById("stage-badge-2");
+  const stage3 = document.getElementById("stage-badge-3");
+  const stage4 = document.getElementById("stage-badge-4");
+
+  const activateStage = (activeIdx) => {
+    const stages = [stage1, stage2, stage3, stage4];
+    stages.forEach((st, idx) => {
+      if (!st) return;
+      const dot = st.querySelector("span:first-child");
+      if (idx < activeIdx) {
+        st.className = "text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full font-medium apple-glass text-emerald-500 border border-emerald-500/40 bg-emerald-500/10 flex items-center space-x-1.5";
+        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+      } else if (idx === activeIdx) {
+        st.className = "text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full font-medium apple-glass text-indigo-500 border border-indigo-500/40 bg-indigo-500/10 flex items-center space-x-1.5";
+        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse";
+      } else {
+        st.className = "text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full font-medium apple-glass text-slate-400 border border-black/[0.06] dark:border-white/[0.08] flex items-center space-x-1.5";
+        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-slate-400";
+      }
+    });
+  };
+
+  activateStage(0);
+
+  if (portfolioAnalysisTimer) clearInterval(portfolioAnalysisTimer);
+  portfolioAnalysisTimer = setInterval(() => {
+    portfolioAnalysisSeconds += 1;
+    if (timerBadge) timerBadge.textContent = `${portfolioAnalysisSeconds}s elapsed`;
+
+    if (portfolioAnalysisSeconds < 4) {
+      activateStage(0);
+      if (statusText) statusText.textContent = "Fetching 3-year historical bars & technical indicators from Alpaca...";
+    } else if (portfolioAnalysisSeconds < 8) {
+      activateStage(1);
+      if (statusText) statusText.textContent = "Fitting Quantile Gradient Boosted Trees (10th, 50th, 90th percentiles) & Ridge models...";
+    } else if (portfolioAnalysisSeconds < 13) {
+      activateStage(2);
+      if (statusText) statusText.textContent = "Simulating 36-month monthly volatility diffusion cones and downside support floors...";
+    } else {
+      activateStage(3);
+      if (statusText) statusText.textContent = "Aggregating multi-asset joint distributions, compound CAGR, and portfolio envelopes...";
+    }
+  }, 1000);
+}
+
+function stopPortfolioLoadingAnimation() {
+  if (portfolioAnalysisTimer) {
+    clearInterval(portfolioAnalysisTimer);
+    portfolioAnalysisTimer = null;
+  }
+
+  const banner = document.getElementById("portfolio-loading-banner");
+  const chart60dLoading = document.getElementById("portfolio-60d-chart-loading");
+  const chart3yLoading = document.getElementById("portfolio-3y-chart-loading");
+  const kpiSection = document.getElementById("portfolio-kpi-section");
+  const recalcBtn = document.getElementById("portfolio-recalc-btn");
+
+  if (banner) banner.classList.add("hidden");
+  if (chart60dLoading) chart60dLoading.classList.add("hidden");
+  if (chart3yLoading) chart3yLoading.classList.add("hidden");
+
+  if (kpiSection) {
+    kpiSection.querySelectorAll(".apple-glass").forEach(card => card.classList.remove("card-loading-shimmer"));
+  }
+
+  if (recalcBtn) {
+    recalcBtn.classList.remove("opacity-50", "pointer-events-none");
+    const icon = recalcBtn.querySelector("i");
+    if (icon) icon.classList.remove("animate-spin");
+    const span = recalcBtn.querySelector("span");
+    if (span) span.textContent = "Recalculate";
+  }
+}
+
+async function fetchPortfolioForecast(isBackgroundUpdate = false) {
+  if (portfolioHoldings.length === 0) return;
+
+  if (!isBackgroundUpdate) {
+    startPortfolioLoadingAnimation();
   }
 
   if (isBackgroundUpdate) {
@@ -1413,10 +1518,8 @@ async function fetchPortfolioForecast(isBackgroundUpdate = false) {
   } finally {
     if (isBackgroundUpdate) {
       isPortfolioLiveUpdating = false;
-    } else if (recalcBtn) {
-      recalcBtn.classList.remove("opacity-50", "pointer-events-none");
-      const icon = recalcBtn.querySelector("i");
-      if (icon) icon.classList.remove("animate-spin");
+    } else {
+      stopPortfolioLoadingAnimation();
     }
   }
 }
