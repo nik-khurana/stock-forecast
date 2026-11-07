@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadPortfolioVault();
   initPortfolioEventListeners();
   initPortfolioAutocomplete();
+  checkPortfolioMarketStatus();
 
   // If vault is locked, show unlock modal on initial visit
   if (isVaultLocked) {
@@ -80,6 +81,47 @@ function showToast(message, type = "info") {
     toast.classList.add("opacity-0", "translate-y-2");
     setTimeout(() => toast.remove(), 350);
   }, 3500);
+}
+
+/**
+ * HTML Sanitizer to prevent Cross-Site Scripting (XSS)
+ */
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Chart.js Interactive Crosshair Plugin for Sleek Desktop Hover
+ */
+function getCrosshairPlugin(isDark) {
+  return {
+    id: "crosshairLine",
+    afterDatasetsDraw: (chart) => {
+      if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
+        const activePoint = chart.tooltip._active[0];
+        const ctx = chart.ctx;
+        const x = activePoint.element.x;
+        const topY = chart.scales.y.top;
+        const bottomY = chart.scales.y.bottom;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([3, 3]);
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, bottomY);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 0, 0, 0.2)";
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  };
 }
 
 /**
@@ -546,13 +588,30 @@ function initPortfolioEventListeners() {
         try {
           const parsed = JSON.parse(evt.target.result);
           if (Array.isArray(parsed.holdings)) {
-            portfolioHoldings = parsed.holdings;
+            // Strict sanitization & validation on imported backup
+            const clean = [];
+            parsed.holdings.forEach((h) => {
+              if (h && typeof h.ticker === "string") {
+                const tk = h.ticker.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+                const sh = parseFloat(h.shares);
+                const bp = parseFloat(h.buy_price);
+                if (tk && Number.isFinite(sh) && sh > 0 && Number.isFinite(bp) && bp > 0) {
+                  clean.push({
+                    ticker: tk,
+                    shares: sh,
+                    buy_price: bp,
+                    added_at: typeof h.added_at === "string" ? h.added_at : new Date().toISOString()
+                  });
+                }
+              }
+            });
+            portfolioHoldings = clean;
             await savePortfolioVault();
             renderHoldingsTable();
             fetchPortfolioForecast();
-            showToast(`Restored ${portfolioHoldings.length} positions from backup`, "success");
+            showToast(`Safely restored ${portfolioHoldings.length} positions from backup`, "success");
           } else {
-            showToast("Invalid backup file format.", "error");
+            showToast("Invalid backup file format. Expected a 'holdings' list.", "error");
           }
         } catch (err) {
           showToast("Failed to parse backup JSON file.", "error");
@@ -772,12 +831,14 @@ function renderHoldingsTable() {
     }
 
     const costBasis = (h.shares * h.buy_price).toFixed(2);
+    const safeTicker = escapeHtml(h.ticker);
+    const safeShares = escapeHtml(h.shares);
 
     tr.innerHTML = `
       <td class="py-3 px-5 font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-        <span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-500 text-xs font-mono">${h.ticker}</span>
+        <span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-500 text-xs font-mono">${safeTicker}</span>
       </td>
-      <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 font-medium">${h.shares}</td>
+      <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 font-medium">${safeShares}</td>
       <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 privacy-value">$${h.buy_price.toFixed(2)}</td>
       <td class="py-3 px-4 text-right text-indigo-600 dark:text-indigo-400 font-semibold privacy-value">${livePriceStr}</td>
       <td class="py-3 px-4 text-right text-slate-500 dark:text-slate-400 privacy-value">$${costBasis}</td>
@@ -983,6 +1044,7 @@ function renderPortfolio60dChart(dailyPoints, currentVal) {
 
   portfolio60dChart = new Chart(ctx, {
     type: "line",
+    plugins: [getCrosshairPlugin(dark)],
     data: {
       labels: labels,
       datasets: [
@@ -1014,6 +1076,16 @@ function renderPortfolio60dChart(dailyPoints, currentVal) {
           pointRadius: 0,
           pointHoverRadius: 5,
           tension: 0.25,
+          fill: "start",
+          backgroundColor: (context) => {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return null;
+            const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            grad.addColorStop(0, dark ? "rgba(99, 102, 241, 0.22)" : "rgba(99, 102, 241, 0.10)");
+            grad.addColorStop(1, "rgba(99, 102, 241, 0.0)");
+            return grad;
+          },
         },
       ],
     },
@@ -1119,6 +1191,7 @@ function renderPortfolio3yChart(monthlyPoints) {
 
   portfolio3yChart = new Chart(ctx, {
     type: "line",
+    plugins: [getCrosshairPlugin(dark)],
     data: {
       labels: labels,
       datasets: [
@@ -1214,7 +1287,7 @@ function populatePortfolioMonthlyTable(monthlyPoints) {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition";
     tr.innerHTML = `
-      <td class="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">${p.year_month}</td>
+      <td class="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">${escapeHtml(p.year_month)}</td>
       <td class="py-2.5 px-4 text-slate-400">Month +${p.month_index}</td>
       <td class="py-2.5 px-4 text-right text-rose-500 privacy-value">$${p.min.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
       <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400 privacy-value">$${p.mean.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
@@ -1223,3 +1296,34 @@ function populatePortfolioMonthlyTable(monthlyPoints) {
     tbody.appendChild(tr);
   });
 }
+
+/**
+ * Checks backend health and updates the live US market session status pill.
+ */
+async function checkPortfolioMarketStatus() {
+  try {
+    const res = await fetch("/api/health");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.market_status) {
+      const ms = data.market_status;
+      const pill = document.getElementById("market-status-pill");
+      const dot = document.getElementById("market-dot");
+      const text = document.getElementById("market-status-text");
+      if (pill && dot && text) {
+        text.textContent = `${ms.label} (${ms.et_time})`;
+        pill.title = ms.sub_label || ms.label;
+        if (ms.is_open) {
+          dot.className = "w-2 h-2 rounded-full bg-emerald-500 market-pulse-emerald";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md";
+        } else {
+          dot.className = "w-2 h-2 rounded-full bg-amber-500 market-pulse-amber";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Market status check error:", err);
+  }
+}
+

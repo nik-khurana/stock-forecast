@@ -309,53 +309,83 @@ class ForecastService:
 
         # Step 2: Concurrently fetch stock bundles (3Y daily bars + latest live quote)
         bundles: Dict[str, Any] = {}
+        warnings: List[str] = []
+
         def _fetch_bundle(tk: str):
-            return tk, self.alpaca_client.get_stock_bundle(tk, years=3)
+            try:
+                bundle = self.alpaca_client.get_stock_bundle(tk, years=3)
+                return tk, bundle, None
+            except Exception as e:
+                return tk, None, str(e)
 
         with ThreadPoolExecutor(max_workers=min(len(unique_tickers), 8)) as executor:
-            for tk, bundle in executor.map(_fetch_bundle, unique_tickers):
-                bundles[tk] = bundle
+            for tk, bundle, err in executor.map(_fetch_bundle, unique_tickers):
+                if err or not bundle or bundle.get("bars_df") is None or bundle["bars_df"].empty:
+                    msg = f"Symbol '{tk}': {err or 'No historical bars returned from market data feed.'}"
+                    logger.warning("Portfolio bundle fetch error: %s", msg)
+                    warnings.append(msg)
+                else:
+                    bundles[tk] = bundle
 
-        # Step 3: Run ML models for each holding
+        # Step 3: Run ML models for each valid holding
         stock_daily_forecasts: Dict[str, List[Dict[str, Any]]] = {}
         stock_monthly_forecasts: Dict[str, List[Dict[str, Any]]] = {}
         current_quotes: Dict[str, Any] = {}
+        valid_holdings: List[Dict[str, Any]] = []
 
-        for tk in unique_tickers:
+        for h in normalized_holdings:
+            tk = h["ticker"]
+            if tk not in bundles:
+                continue
+
             b = bundles[tk]
-            bars_df = b["bars_df"]
-            quote = b["quote"]
-            current_price = quote["price"]
-            current_quotes[tk] = quote
-            last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
+            bars_df = b.get("bars_df")
+            quote = b.get("quote")
 
-            feat_df, feature_cols = self.feature_builder.build_features(bars_df)
+            if bars_df is None or bars_df.empty or not quote:
+                warnings.append(f"Symbol '{tk}': Insufficient price history to generate ML forecast.")
+                continue
 
-            gbdt = GBDTModel()
-            gbdt_res = gbdt.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
+            try:
+                current_price = quote["price"]
+                last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
 
-            ridge = RidgeModel(alpha=2.5)
-            ridge_res = ridge.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
+                feat_df, feature_cols = self.feature_builder.build_features(bars_df)
 
-            ensemble_res = EnsembleModel.blend(gbdt_res, ridge_res)
+                gbdt = GBDTModel()
+                gbdt_res = gbdt.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
 
-            if selected_model == "gbdt":
-                chosen = gbdt_res
-            elif selected_model == "ridge":
-                chosen = ridge_res
-            else:
-                chosen = ensemble_res
+                ridge = RidgeModel(alpha=2.5)
+                ridge_res = ridge.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
 
-            stock_daily_forecasts[tk] = chosen["daily_forecast"]
-            m_res = self.long_term_model.predict_36_months(bars_df, current_price, last_date)
-            stock_monthly_forecasts[tk] = m_res["monthly_forecast"]
+                ensemble_res = EnsembleModel.blend(gbdt_res, ridge_res)
 
-        # Step 4: Calculate portfolio breakdown and aggregate totals
-        total_cost_basis = sum(h["cost_basis"] for h in normalized_holdings)
+                if selected_model == "gbdt":
+                    chosen = gbdt_res
+                elif selected_model == "ridge":
+                    chosen = ridge_res
+                else:
+                    chosen = ensemble_res
+
+                stock_daily_forecasts[tk] = chosen["daily_forecast"]
+                m_res = self.long_term_model.predict_36_months(bars_df, current_price, last_date)
+                stock_monthly_forecasts[tk] = m_res["monthly_forecast"]
+                current_quotes[tk] = quote
+                valid_holdings.append(h)
+            except Exception as e:
+                logger.error("Error generating forecast for holding %s: %s", tk, e, exc_info=True)
+                warnings.append(f"Symbol '{tk}': Model training failed ({str(e)})")
+
+        if not valid_holdings:
+            err_detail = "; ".join(warnings) if warnings else "No valid stock positions could be processed."
+            raise ValueError(f"Unable to generate portfolio forecast: {err_detail}")
+
+        # Step 4: Calculate portfolio breakdown and aggregate totals using valid holdings
+        total_cost_basis = sum(h["cost_basis"] for h in valid_holdings)
         current_portfolio_value = 0.0
 
         holdings_breakdown = []
-        for h in normalized_holdings:
+        for h in valid_holdings:
             tk = h["ticker"]
             curr_p = current_quotes[tk]["price"]
             curr_val = round(h["shares"] * curr_p, 2)
@@ -401,7 +431,7 @@ class ForecastService:
 
         # Step 5: Daily Aggregate Portfolio Forecast (e.g. 60 Days)
         portfolio_60d_daily = []
-        ref_tk = unique_tickers[0]
+        ref_tk = valid_holdings[0]["ticker"]
         actual_days = len(stock_daily_forecasts[ref_tk])
 
         for day_idx in range(actual_days):
@@ -410,7 +440,7 @@ class ForecastService:
             day_min = 0.0
             day_max = 0.0
 
-            for h in normalized_holdings:
+            for h in valid_holdings:
                 tk = h["ticker"]
                 pt = stock_daily_forecasts[tk][day_idx]
                 day_mean += h["shares"] * pt["mean"]
@@ -449,7 +479,7 @@ class ForecastService:
             m_min = 0.0
             m_max = 0.0
 
-            for h in normalized_holdings:
+            for h in valid_holdings:
                 tk = h["ticker"]
                 m_pt = stock_monthly_forecasts[tk][m_idx]
                 m_mean += h["shares"] * m_pt["mean"]
@@ -482,6 +512,7 @@ class ForecastService:
             "num_holdings": len(holdings_breakdown),
             "selected_model": selected_model,
             "execution_time_ms": execution_time_ms,
+            "warnings": warnings,
             "holdings_breakdown": holdings_breakdown,
             "portfolio_60d_daily": portfolio_60d_daily,
             "portfolio_60d_summary": {

@@ -30,18 +30,72 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initEventListeners();
   initCSVExportListeners();
+  initShareButton();
   updateNavPortfolioBadge();
   checkHealth();
 
-  // URL Deep Linking: Check if ?ticker=XYZ is present in the browser address bar
+  // URL Deep Linking: Check if ?ticker=XYZ and ?model=XYZ are present in the browser address bar
   const urlParams = new URLSearchParams(window.location.search);
   const initialTicker = (urlParams.get("ticker") || "AAPL").trim().toUpperCase();
+  const initialModel = (urlParams.get("model") || "").trim().toLowerCase();
+  if (["ensemble", "gbdt", "ridge"].includes(initialModel)) {
+    selectedModel = initialModel;
+    document.querySelectorAll(".model-tab").forEach((t) => {
+      if (t.getAttribute("data-model") === initialModel) {
+        t.classList.add("active");
+      } else {
+        t.classList.remove("active");
+      }
+    });
+  }
+
   const tickerInput = document.getElementById("ticker-input");
   if (tickerInput) {
     tickerInput.value = initialTicker;
   }
   fetchForecast(initialTicker);
 });
+
+/**
+ * HTML Sanitizer to prevent Cross-Site Scripting (XSS)
+ */
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Chart.js Interactive Crosshair Plugin for Sleek Desktop Hover
+ */
+function getCrosshairPlugin(isDark) {
+  return {
+    id: "crosshairLine",
+    afterDatasetsDraw: (chart) => {
+      if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
+        const activePoint = chart.tooltip._active[0];
+        const ctx = chart.ctx;
+        const x = activePoint.element.x;
+        const topY = chart.scales.y.top;
+        const bottomY = chart.scales.y.bottom;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([3, 3]);
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, bottomY);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 0, 0, 0.2)";
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  };
+}
 
 /**
  * Apple-Style Floating Toast Notification System
@@ -429,7 +483,45 @@ function initCSVExportListeners() {
 }
 
 /**
- * Checks backend health and updates the header badge.
+ * 1-Click Share Forecast Link to Clipboard
+ */
+function initShareButton() {
+  const shareBtn = document.getElementById("share-forecast-btn");
+  if (!shareBtn) return;
+
+  shareBtn.addEventListener("click", () => {
+    const url = `${window.location.origin}/?ticker=${encodeURIComponent(currentTicker)}&model=${encodeURIComponent(selectedModel)}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => {
+        showToast(`Copied forecast link: ${currentTicker} (${selectedModel})`, "success");
+      }).catch(() => {
+        fallbackCopyTextToClipboard(url);
+      });
+    } else {
+      fallbackCopyTextToClipboard(url);
+    }
+  });
+}
+
+function fallbackCopyTextToClipboard(text) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.left = "-999999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand("copy");
+    showToast(`Copied forecast link: ${currentTicker}`, "success");
+  } catch (err) {
+    showToast("Unable to copy link to clipboard", "error");
+  }
+  document.body.removeChild(textArea);
+}
+
+/**
+ * Checks backend health, Alpaca connection, and live US Market session status.
  */
 async function checkHealth() {
   try {
@@ -447,20 +539,43 @@ async function checkHealth() {
       statusBadge.className =
         "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
     }
+
+    // Live US Market Session Status Pill
+    if (data.market_status) {
+      const ms = data.market_status;
+      const pill = document.getElementById("market-status-pill");
+      const dot = document.getElementById("market-dot");
+      const text = document.getElementById("market-status-text");
+      if (pill && dot && text) {
+        text.textContent = `${ms.label} (${ms.et_time})`;
+        pill.title = ms.sub_label || ms.label;
+        if (ms.is_open) {
+          dot.className = "w-2 h-2 rounded-full bg-emerald-500 market-pulse-emerald";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md";
+        } else {
+          dot.className = "w-2 h-2 rounded-full bg-amber-500 market-pulse-amber";
+          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
+        }
+      }
+    }
   } catch (err) {
     console.error("Health check error:", err);
   }
 }
 
 /**
- * Asynchronously fetches stock forecast from FastAPI backend.
+ * Asynchronously fetches stock forecast from FastAPI backend with smooth skeleton shimmer.
  */
 async function fetchForecast(ticker) {
-  const loading = document.getElementById("loading-spinner");
+  const skeleton = document.getElementById("skeleton-loader");
   const content = document.getElementById("dashboard-content");
 
-  loading.classList.remove("hidden");
-  content.classList.add("opacity-30");
+  if (!currentData && skeleton && content) {
+    skeleton.classList.remove("hidden");
+    content.classList.add("hidden");
+  } else if (content) {
+    content.classList.add("opacity-40", "pointer-events-none");
+  }
 
   try {
     const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/forecast?model=${selectedModel}`);
@@ -472,8 +587,8 @@ async function fetchForecast(ticker) {
     currentData = data;
     currentTicker = data.ticker;
 
-    // Deep Linking: Update browser URL bar (?ticker=XYZ) without reloading
-    window.history.pushState({}, '', `?ticker=${currentTicker}`);
+    // Deep Linking: Update browser URL bar (?ticker=XYZ&model=XYZ) without reloading
+    window.history.pushState({}, '', `?ticker=${currentTicker}&model=${selectedModel}`);
 
     renderDashboard(data);
     const toastMsg = data.company_name
@@ -484,8 +599,11 @@ async function fetchForecast(ticker) {
     console.error("Forecast fetch error:", err);
     showToast(err.message || `Could not fetch forecast for ${ticker}`, "error");
   } finally {
-    loading.classList.add("hidden");
-    content.classList.remove("opacity-30");
+    if (skeleton) skeleton.classList.add("hidden");
+    if (content) {
+      content.classList.remove("hidden", "opacity-40", "pointer-events-none");
+      content.classList.add("fade-in");
+    }
   }
 }
 
@@ -801,7 +919,7 @@ function renderForecastChart(historical, dailyForecast) {
 
   forecastChart = new Chart(ctx, {
     type: "line",
-    plugins: [forecastDividerPlugin],
+    plugins: [forecastDividerPlugin, getCrosshairPlugin(dark)],
     data: {
       datasets: [
         {
@@ -812,6 +930,16 @@ function renderForecastChart(historical, dailyForecast) {
           pointRadius: 0,
           pointHoverRadius: 4,
           tension: 0.15,
+          fill: "start",
+          backgroundColor: (context) => {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return null;
+            const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            grad.addColorStop(0, dark ? "rgba(6, 182, 212, 0.22)" : "rgba(6, 182, 212, 0.12)");
+            grad.addColorStop(1, "rgba(6, 182, 212, 0.0)");
+            return grad;
+          },
         },
         {
           label: "Predicted Max (Upper Bound)",
@@ -954,6 +1082,7 @@ function renderMonthlyForecast(monthlyRes) {
 
   monthlyChart = new Chart(ctx, {
     type: "line",
+    plugins: [getCrosshairPlugin(dark)],
     data: {
       labels: labels,
       datasets: [

@@ -19,7 +19,9 @@ import os
 import re
 import time
 import logging
-from typing import Optional, Literal, Dict, List
+from typing import Optional, Literal, Dict, List, Any
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -53,10 +55,19 @@ RATE_WINDOW_SECONDS = 60.0
 
 def enforce_rate_limit(client_ip: str):
     """
-    In-memory sliding window rate limiter.
+    In-memory sliding window rate limiter with automated memory cleanup.
     Limits each client IP to MAX_REQUESTS_PER_MINUTE requests per 60 seconds.
+    Prevents memory leaks by evicting stale IPs when dictionary size exceeds 1000.
     """
     now = time.time()
+
+    # Periodic cleanup to prevent unbounded memory growth
+    if len(_IP_REQUEST_LOGS) > 1000:
+        cutoff = now - RATE_WINDOW_SECONDS
+        stale_ips = [ip for ip, logs in _IP_REQUEST_LOGS.items() if not logs or logs[-1] < cutoff]
+        for ip in stale_ips:
+            _IP_REQUEST_LOGS.pop(ip, None)
+
     timestamps = _IP_REQUEST_LOGS.get(client_ip, [])
     # Filter out timestamps older than the sliding window
     fresh_timestamps = [ts for ts in timestamps if now - ts < RATE_WINDOW_SECONDS]
@@ -70,6 +81,64 @@ def enforce_rate_limit(client_ip: str):
 
     fresh_timestamps.append(now)
     _IP_REQUEST_LOGS[client_ip] = fresh_timestamps
+
+def get_market_status() -> Dict[str, Any]:
+    """
+    Computes current NYSE / NASDAQ trading session status in US Eastern Time (ET).
+    - Regular Hours: Monday - Friday 9:30 AM - 4:00 PM ET
+    - Pre-Market: Monday - Friday 4:00 AM - 9:30 AM ET
+    - After-Hours: Monday - Friday 4:00 PM - 8:00 PM ET
+    - Closed: Weekends and 8:00 PM - 4:00 AM ET
+    """
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    weekday = now_et.weekday()  # 0=Mon, 4=Fri, 5=Sat, 6=Sun
+    minute_of_day = now_et.hour * 60 + now_et.minute
+
+    if weekday >= 5:
+        return {
+            "is_open": False,
+            "session": "closed",
+            "label": "Market Closed (Weekend)",
+            "et_time": now_et.strftime("%I:%M %p ET"),
+            "color": "amber",
+        }
+
+    if 570 <= minute_of_day < 960:
+        return {
+            "is_open": True,
+            "session": "regular",
+            "label": "Market Open",
+            "sub_label": "NYSE / NASDAQ regular trading",
+            "et_time": now_et.strftime("%I:%M %p ET"),
+            "color": "emerald",
+        }
+    elif 240 <= minute_of_day < 570:
+        return {
+            "is_open": False,
+            "session": "pre_market",
+            "label": "Pre-Market Session",
+            "sub_label": "Opens at 9:30 AM ET",
+            "et_time": now_et.strftime("%I:%M %p ET"),
+            "color": "amber",
+        }
+    elif 960 <= minute_of_day < 1200:
+        return {
+            "is_open": False,
+            "session": "after_hours",
+            "label": "After-Hours Session",
+            "sub_label": "Closes at 8:00 PM ET",
+            "et_time": now_et.strftime("%I:%M %p ET"),
+            "color": "amber",
+        }
+    else:
+        return {
+            "is_open": False,
+            "session": "closed",
+            "label": "Market Closed",
+            "sub_label": "Pre-market opens 4:00 AM ET",
+            "et_time": now_et.strftime("%I:%M %p ET"),
+            "color": "amber",
+        }
 
 def validate_ticker(ticker: str) -> str:
     """
@@ -92,8 +161,22 @@ app = FastAPI(
 )
 
 # -------------------------------------------------------------
-# CORS Middleware Configuration (Production-Ready)
+# Security Headers Middleware & CORS Configuration
 # -------------------------------------------------------------
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """
+    Applies security response headers to safeguard against MIME sniffing, clickjacking,
+    unauthorized sensor access, and cross-origin leaks.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -124,7 +207,7 @@ POPULAR_TICKERS = [
 def health():
     """
     Health check endpoint.
-    Used by the frontend to display the live Alpaca connection status badge.
+    Used by the frontend to display live Alpaca connection and US Market status badges.
     """
     return {
         "status": "healthy",
@@ -132,6 +215,7 @@ def health():
         "alpaca_base_url": get_alpaca_base_url(),
         "alpaca_data_url": get_alpaca_data_url(),
         "supported_models": ["ensemble", "gbdt", "ridge"],
+        "market_status": get_market_status(),
     }
 
 @app.get("/api/search")

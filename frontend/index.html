@@ -59,8 +59,14 @@
         </div>
       </div>
 
-      <!-- Right Header Actions: Alpaca Status + Portfolio Page Link + Theme Toggle -->
+      <!-- Right Header Actions: Market Status + Alpaca Status + Portfolio Page Link + Theme Toggle -->
       <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        <!-- Live US Market Status Pill -->
+        <div id="market-status-pill" class="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
+          <span id="market-dot" class="w-2 h-2 rounded-full bg-amber-500 market-pulse-amber"></span>
+          <span id="market-status-text" class="font-medium text-[11px] text-slate-700 dark:text-slate-300">Checking Market...</span>
+        </div>
+
         <!-- Owned Stocks Dedicated Page Link -->
         <a
           href="/portfolio"
@@ -136,12 +142,28 @@
       </div>
     </section>
 
-    <!-- Loading State -->
-    <div id="loading-spinner" class="hidden py-16 text-center space-y-4">
-      <div class="inline-block w-10 h-10 border-3 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-      <p class="text-slate-600 dark:text-slate-300 text-xs font-medium">
-        Fetching 3 years of daily bars from Alpaca and training ML models...
-      </p>
+    <!-- Skeleton Loading State (Apple-Style Shimmer) -->
+    <div id="skeleton-loader" class="hidden space-y-6">
+      <div class="p-6 rounded-3xl apple-glass flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="space-y-3">
+          <div class="skeleton-shimmer h-8 w-44"></div>
+          <div class="skeleton-shimmer h-4 w-72"></div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="skeleton-shimmer h-10 w-32 hidden sm:block"></div>
+          <div class="skeleton-shimmer h-12 w-40"></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="skeleton-shimmer h-28"></div>
+        <div class="skeleton-shimmer h-28"></div>
+        <div class="skeleton-shimmer h-28"></div>
+        <div class="skeleton-shimmer h-28"></div>
+      </div>
+      <div class="p-6 rounded-3xl apple-glass space-y-4">
+        <div class="skeleton-shimmer h-6 w-56"></div>
+        <div class="skeleton-shimmer h-80 w-full"></div>
+      </div>
     </div>
 
     <!-- Main Dashboard Content -->
@@ -156,6 +178,15 @@
             <span id="stock-source-pill" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-medium">
               Alpaca Market Data v2
             </span>
+            <!-- 1-Click Share Forecast Link -->
+            <button
+              id="share-forecast-btn"
+              class="px-2.5 py-1 rounded-xl apple-glass text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] transition flex items-center space-x-1 shadow-sm"
+              title="Copy deep-link to this forecast"
+            >
+              <i data-lucide="share-2" class="w-3.5 h-3.5 text-indigo-500"></i>
+              <span>Share</span>
+            </button>
           </div>
           <p id="data-range-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Historical 3-Year Daily Bars (2023 - 2026)

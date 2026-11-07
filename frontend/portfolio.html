@@ -69,8 +69,14 @@
         </div>
       </div>
 
-      <!-- Right Header Actions: Privacy Mask + Recalculate + Theme Toggle -->
+      <!-- Right Header Actions: Market Status + Privacy Mask + Recalculate + Theme Toggle -->
       <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        <!-- Live US Market Status Pill -->
+        <div id="market-status-pill" class="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
+          <span id="market-dot" class="w-2 h-2 rounded-full bg-amber-500 market-pulse-amber"></span>
+          <span id="market-status-text" class="font-medium text-[11px] text-slate-700 dark:text-slate-300">Checking Market...</span>
+        </div>
+
         <!-- Privacy Shield Mask Button -->
         <button
           id="vault-privacy-toggle"
@@ -530,3 +536,4 @@
   <script src="/static/portfolio.js"></script>
 </body>
 </html>
+
