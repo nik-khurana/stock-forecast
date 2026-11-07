@@ -919,26 +919,28 @@ function removeHolding(index) {
  */
 function clearPortfolioForecastUI() {
   portfolioForecastData = null;
-  document.getElementById("portfolio-cost-basis").textContent = "$0.00";
-  document.getElementById("portfolio-current-value").textContent = "$0.00";
-  document.getElementById("portfolio-pnl-pill").textContent = "0.00%";
-  document.getElementById("portfolio-pnl-dollar").textContent = "$0.00 Unrealized P&L";
-  document.getElementById("portfolio-60d-mean").textContent = "$0.00";
-  document.getElementById("portfolio-60d-roi").textContent = "+0.00%";
-  document.getElementById("portfolio-60d-profit").textContent = "$0.00 Expected gain";
-  document.getElementById("portfolio-60d-min").textContent = "$0";
-  document.getElementById("portfolio-60d-max").textContent = "$0";
-  document.getElementById("portfolio-y1-val").textContent = "$0.00";
-  document.getElementById("portfolio-y2-val").textContent = "$0.00";
-  document.getElementById("portfolio-y3-val").textContent = "$0.00";
-  document.getElementById("portfolio-cagr").textContent = "+0.00%";
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+    return el;
+  };
 
-  const portSupportStat = document.getElementById("portfolio-support-floor-stat");
-  if (portSupportStat) portSupportStat.textContent = "$0.00";
-  const portCushionStat = document.getElementById("portfolio-support-cushion-stat");
-  if (portCushionStat) portCushionStat.textContent = "+0.0% downside buffer";
-  const headerSupportVal = document.getElementById("header-portfolio-support-val");
-  if (headerSupportVal) headerSupportVal.textContent = "$0.00";
+  setTxt("portfolio-cost-basis", "$0.00");
+  setTxt("portfolio-current-value", "$0.00");
+  setTxt("portfolio-pnl-pill", "0.00%");
+  setTxt("portfolio-pnl-dollar", "$0.00 Unrealized P&L");
+  setTxt("portfolio-60d-mean", "$0.00");
+  setTxt("portfolio-60d-roi", "+0.00%");
+  setTxt("portfolio-60d-profit", "$0.00 Expected gain");
+  setTxt("portfolio-60d-min", "$0");
+  setTxt("portfolio-60d-max", "$0");
+  setTxt("portfolio-y1-val", "$0.00");
+  setTxt("portfolio-y2-val", "$0.00");
+  setTxt("portfolio-y3-val", "$0.00");
+  setTxt("portfolio-cagr", "+0.00%");
+  setTxt("portfolio-support-floor-stat", "$0.00");
+  setTxt("portfolio-support-cushion-stat", "+0.0% downside buffer");
+  setTxt("header-portfolio-support-val", "$0.00");
 
   if (portfolio60dChart) {
     portfolio60dChart.destroy();
@@ -1005,64 +1007,64 @@ async function fetchPortfolioForecast() {
  * Renders portfolio statistics, KPI cards, tables, and charts.
  */
 function renderPortfolioDashboard(data) {
-  // Update KPI Cards
-  const costBasisElem = document.getElementById("portfolio-cost-basis");
-  const currValElem = document.getElementById("portfolio-current-value");
-  const pnlPill = document.getElementById("portfolio-pnl-pill");
-  const pnlDollar = document.getElementById("portfolio-pnl-dollar");
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+    return el;
+  };
 
-  costBasisElem.textContent = `$${data.total_cost_basis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  currValElem.textContent = `$${data.current_portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  // Update KPI Cards
+  setTxt("portfolio-cost-basis", `$${data.total_cost_basis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+  setTxt("portfolio-current-value", `$${data.current_portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
   const isPos = data.total_unrealized_pnl >= 0;
   const pnlSign = isPos ? "+" : "";
-  pnlPill.textContent = `${pnlSign}${data.total_unrealized_pnl_pct.toFixed(2)}%`;
-  pnlPill.className = isPos
-    ? "px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-    : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+  const pnlPill = setTxt("portfolio-pnl-pill", `${pnlSign}${data.total_unrealized_pnl_pct.toFixed(2)}%`);
+  if (pnlPill) {
+    pnlPill.className = isPos
+      ? "px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+      : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+  }
 
-  pnlDollar.textContent = `${pnlSign}$${Math.abs(data.total_unrealized_pnl).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Unrealized P&L`;
-  pnlDollar.className = isPos ? "text-xs font-semibold text-emerald-500 privacy-value" : "text-xs font-semibold text-rose-500 privacy-value";
+  const pnlDollar = setTxt("portfolio-pnl-dollar", `${pnlSign}$${Math.abs(data.total_unrealized_pnl).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Unrealized P&L`);
+  if (pnlDollar) {
+    pnlDollar.className = isPos ? "text-xs font-semibold text-emerald-500 privacy-value" : "text-xs font-semibold text-rose-500 privacy-value";
+  }
 
   // 60-Day KPI Summary
   const s60 = data.portfolio_60d_summary;
-  document.getElementById("portfolio-60d-mean").textContent = `$${s60.end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  if (s60) {
+    setTxt("portfolio-60d-mean", `$${s60.end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
-  const roiSign = s60.expected_roi_60d_pct >= 0 ? "+" : "";
-  const roiElem = document.getElementById("portfolio-60d-roi");
-  roiElem.textContent = `${roiSign}${s60.expected_roi_60d_pct.toFixed(2)}%`;
-  roiElem.className = s60.expected_roi_60d_pct >= 0
-    ? "px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-500"
-    : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500";
+    const roiSign = s60.expected_roi_60d_pct >= 0 ? "+" : "";
+    const roiElem = setTxt("portfolio-60d-roi", `${roiSign}${s60.expected_roi_60d_pct.toFixed(2)}%`);
+    if (roiElem) {
+      roiElem.className = s60.expected_roi_60d_pct >= 0
+        ? "px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-500"
+        : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500";
+    }
 
-  const profitSign = s60.expected_profit_60d >= 0 ? "+" : "";
-  document.getElementById("portfolio-60d-profit").textContent = `${profitSign}$${Math.abs(s60.expected_profit_60d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Expected gain (60D)`;
+    const profitSign = s60.expected_profit_60d >= 0 ? "+" : "";
+    setTxt("portfolio-60d-profit", `${profitSign}$${Math.abs(s60.expected_profit_60d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Expected gain (60D)`);
 
-  document.getElementById("portfolio-60d-min").textContent = `$${Math.round(s60.predicted_min).toLocaleString()}`;
-  document.getElementById("portfolio-60d-max").textContent = `$${Math.round(s60.predicted_max).toLocaleString()}`;
+    setTxt("portfolio-60d-min", `$${Math.round(s60.predicted_min).toLocaleString()}`);
+    setTxt("portfolio-60d-max", `$${Math.round(s60.predicted_max).toLocaleString()}`);
+  }
 
   // 3-Year Milestones
   const s3y = data.portfolio_3y_summary;
-  document.getElementById("portfolio-y1-val").textContent = `$${s3y.year_1_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  document.getElementById("portfolio-y2-val").textContent = `$${s3y.year_2_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  document.getElementById("portfolio-y3-val").textContent = `$${s3y.year_3_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  document.getElementById("portfolio-cagr").textContent = `+${s3y.cagr_3y_pct.toFixed(2)}%`;
+  if (s3y) {
+    setTxt("portfolio-y1-val", `$${s3y.year_1_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    setTxt("portfolio-y2-val", `$${s3y.year_2_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    setTxt("portfolio-y3-val", `$${s3y.year_3_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    setTxt("portfolio-cagr", `+${s3y.cagr_3y_pct.toFixed(2)}%`);
+  }
 
   // Portfolio Critical Support Floor KPI & Pill
   if (data.support_levels) {
-    const portFloorStat = document.getElementById("portfolio-support-floor-stat");
-    const portCushionStat = document.getElementById("portfolio-support-cushion-stat");
-    const headerSupportVal = document.getElementById("header-portfolio-support-val");
-
-    if (portFloorStat) {
-      portFloorStat.textContent = `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    }
-    if (portCushionStat) {
-      portCushionStat.textContent = `+${data.support_levels.cushion_pct.toFixed(1)}% downside buffer ($${data.support_levels.cushion_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
-    }
-    if (headerSupportVal) {
-      headerSupportVal.textContent = `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    }
+    setTxt("portfolio-support-floor-stat", `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    setTxt("portfolio-support-cushion-stat", `+${data.support_levels.cushion_pct.toFixed(1)}% downside buffer ($${data.support_levels.cushion_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`);
+    setTxt("header-portfolio-support-val", `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
     updatePortfolioSupportBtnState();
   }
 
