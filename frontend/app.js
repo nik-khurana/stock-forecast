@@ -394,12 +394,12 @@ function renderForecastChart(historical, dailyForecast) {
     forecastChart.destroy();
   }
 
-  // Theme-aware palette
-  const gridColor = dark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)";
+  // Theme-aware palette (Pitch Black OLED in Dark Mode)
+  const gridColor = dark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.05)";
   const tickColor = dark ? "#64748b" : "#94a3b8";
-  const tooltipBg = dark ? "#0f172a" : "#ffffff";
-  const tooltipBorder = dark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)";
-  const tooltipText = dark ? "#f8fafc" : "#0f172a";
+  const tooltipBg = dark ? "rgba(0, 0, 0, 0.95)" : "#ffffff";
+  const tooltipBorder = dark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.08)";
+  const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
   forecastChart = new Chart(ctx, {
@@ -516,12 +516,12 @@ function renderMonthlyForecast(monthlyRes) {
     monthlyChart.destroy();
   }
 
-  const gridColor = dark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)";
+  const gridColor = dark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.05)";
   const tickColor = dark ? "#64748b" : "#94a3b8";
   const legendColor = dark ? "#94a3b8" : "#475569";
-  const tooltipBg = dark ? "#0f172a" : "#ffffff";
-  const tooltipBorder = dark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)";
-  const tooltipText = dark ? "#f8fafc" : "#0f172a";
+  const tooltipBg = dark ? "rgba(0, 0, 0, 0.95)" : "#ffffff";
+  const tooltipBorder = dark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.08)";
+  const tooltipText = dark ? "#ffffff" : "#0f172a";
   const tooltipTitle = dark ? "#94a3b8" : "#64748b";
 
   monthlyChart = new Chart(ctx, {
