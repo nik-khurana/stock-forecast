@@ -146,6 +146,24 @@ function initEventListeners() {
     });
   }
 
+  // Toggle 30-day daily table
+  const toggleDailyBtn = document.getElementById("toggle-daily-table-btn");
+  const dailyTableContainer = document.getElementById("daily-table-container");
+  const dailyChevron = document.getElementById("daily-table-chevron");
+
+  if (toggleDailyBtn && dailyTableContainer) {
+    toggleDailyBtn.addEventListener("click", () => {
+      const isHidden = dailyTableContainer.classList.contains("hidden");
+      if (isHidden) {
+        dailyTableContainer.classList.remove("hidden");
+        dailyChevron.classList.add("rotate-180");
+      } else {
+        dailyTableContainer.classList.add("hidden");
+        dailyChevron.classList.remove("rotate-180");
+      }
+    });
+  }
+
   // Toggle 36-month table
   const toggleBtn = document.getElementById("toggle-table-btn");
   const tableContainer = document.getElementById("monthly-table-container");
@@ -339,6 +357,44 @@ function updateModelView() {
   const roiSign = summary.expected_return_pct >= 0 ? "+" : "";
   roiElem.textContent = `${roiSign}${summary.expected_return_pct.toFixed(2)}%`;
   roiElem.className = summary.expected_return_pct >= 0 ? "font-bold text-emerald-500" : "font-bold text-rose-500";
+
+  // Update model badge on the 30-day table
+  const modelNames = {
+    ensemble: "Model: Blended Ensemble (GBDT + Ridge)",
+    gbdt: "Model: Gradient Boosted Trees (Quantile)",
+    ridge: "Model: Ridge Regression (L2 Regularized)",
+  };
+  const badgeElem = document.getElementById("daily-table-model-badge");
+  if (badgeElem) {
+    badgeElem.textContent = modelNames[selectedModel] || "Model: Blended Ensemble";
+  }
+
+  // Populate 30-Day Detailed Daily Forecast Table
+  const dailyTbody = document.getElementById("daily-table-body");
+  if (dailyTbody) {
+    dailyTbody.innerHTML = "";
+    const currentPrice = currentData.quote.price;
+
+    daily.forEach((pt, idx) => {
+      const tr = document.createElement("tr");
+      tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition";
+      const spread = (pt.max - pt.min).toFixed(2);
+      const chgPct = (((pt.mean - currentPrice) / currentPrice) * 100).toFixed(2);
+      const sign = chgPct >= 0 ? "+" : "";
+      const chgColor = chgPct >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400";
+
+      tr.innerHTML = `
+        <td class="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">Day +${idx + 1}</td>
+        <td class="py-2.5 px-4 text-slate-500 dark:text-slate-400">${pt.date}</td>
+        <td class="py-2.5 px-4 text-right text-rose-500 dark:text-rose-400">$${pt.min.toFixed(2)}</td>
+        <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400">$${pt.mean.toFixed(2)}</td>
+        <td class="py-2.5 px-4 text-right text-emerald-500 dark:text-emerald-400">$${pt.max.toFixed(2)}</td>
+        <td class="py-2.5 px-4 text-right text-slate-400">&plusmn;$${spread}</td>
+        <td class="py-2.5 px-4 text-right font-semibold ${chgColor}">${sign}${chgPct}%</td>
+      `;
+      dailyTbody.appendChild(tr);
+    });
+  }
 
   renderForecastChart(currentData.historical_points, daily);
 }
