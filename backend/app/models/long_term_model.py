@@ -68,8 +68,18 @@ class LongTermMonthlyModel:
             y_hist = np.log(monthly_df.values)
             slope, intercept = np.polyfit(t_hist, y_hist, 1)
 
-            # Dampen extreme historical trend slopes for forward 3-year sustainability
-            trend_slope = float(np.clip(slope, -0.015, 0.025))
+            # Compute trailing 12-month trend slope to capture recent regime shifts
+            if len(monthly_df) >= 12:
+                t_12 = np.arange(12)
+                y_12 = np.log(monthly_df.values[-12:])
+                slope_12, _ = np.polyfit(t_12, y_12, 1)
+            else:
+                slope_12 = slope
+
+            # Blend 36-month structural baseline (40%) with 12-month recent regime momentum (60%)
+            # This ensures stocks in a prolonged downtrend or selloff do not project artificial upward slopes.
+            blended_slope = 0.40 * slope + 0.60 * slope_12
+            trend_slope = float(np.clip(blended_slope, -0.025, 0.025))
 
         # -------------------------------------------------------------
         # 2. Project 36 Forward Monthly Intervals (3 Years)

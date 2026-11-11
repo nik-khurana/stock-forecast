@@ -88,11 +88,12 @@ class GBDTModel:
         data = df_features.copy()
 
         # -------------------------------------------------------------
-        # 1. Define Supervised Learning Target: Next-Day Log Return
+        # 1. Define Multi-Horizon Forward Return Target with Recency Weighting
         # -------------------------------------------------------------
-        # In financial modeling, log returns r = ln(P[t+1] / P[t]) are stationary,
-        # symmetric, and mathematically additive across consecutive days.
-        data["target_return"] = np.log(data["close"] / data["close"].shift(1)).shift(-1)
+        # Direct multi-horizon target: Cumulative log return over H business days
+        # H represents the core horizon (e.g. 21 business days = ~1 calendar month).
+        H = max(5, min(n_days, 21))
+        data["target_return"] = np.log(data["close"].shift(-H) / data["close"])
         train_data = data.dropna(subset=["target_return"] + feature_cols).reset_index(drop=True)
 
         if len(train_data) < 30:
@@ -107,71 +108,75 @@ class GBDTModel:
         X = train_data[feature_cols].values
         y = train_data["target_return"].values
 
+        # Exponential Recency Weighting (half-life = 90 trading days)
+        # Prevents 3-year-old bull market regimes from overpowering current selloffs or downtrends.
+        half_life = 90
+        n_samples = len(train_data)
+        sample_weights = np.exp(-np.log(2) * (n_samples - 1 - np.arange(n_samples)) / half_life)
+        sample_weights = sample_weights / np.mean(sample_weights)
+
         # Normalize features
         X_scaled = self.scaler.fit_transform(X)
 
         # -------------------------------------------------------------
-        # 2. Fit the Quantile Gradient Boosted Trees
+        # 2. Fit the Quantile Gradient Boosted Trees with Sample Weighting
         # -------------------------------------------------------------
-        self.model_lower.fit(X_scaled, y)
-        self.model_median.fit(X_scaled, y)
-        self.model_upper.fit(X_scaled, y)
+        self.model_lower.fit(X_scaled, y, sample_weight=sample_weights)
+        self.model_median.fit(X_scaled, y, sample_weight=sample_weights)
+        self.model_upper.fit(X_scaled, y, sample_weight=sample_weights)
 
         # -------------------------------------------------------------
-        # 3. Multi-Step Forward Recursive Prediction Loop (n_days Business Days)
+        # 3. Predict Forward Multi-Horizon Quantile Returns from Latest State
         # -------------------------------------------------------------
-        last_features = X[-1:].copy()
+        last_features = X_scaled[-1:]
+        r_median = float(self.model_median.predict(last_features)[0])
+        r_lower = float(self.model_lower.predict(last_features)[0])
+        r_upper = float(self.model_upper.predict(last_features)[0])
+
+        # Enforce strict quantile monotonicity: lower <= median <= upper
+        if r_lower > r_median:
+            r_lower = r_median - 0.05
+        if r_upper < r_median:
+            r_upper = r_median + 0.05
+
+        # Quantitative volatility guardrails
+        r_median = float(np.clip(r_median, -0.45, 0.45))
+        r_lower = float(np.clip(r_lower, -0.65, r_median - 0.02))
+        r_upper = float(np.clip(r_upper, r_median + 0.02, 0.65))
+
+        # Realized daily volatility of historical returns (used for uncertainty cone)
+        daily_log_returns = np.log(train_data["close"] / train_data["close"].shift(1)).dropna().values
+        hist_daily_vol = max(float(np.std(daily_log_returns)), 0.012)
+
+        # -------------------------------------------------------------
+        # 4. Generate Continuous Term-Structure Forward Daily Trajectory
+        # -------------------------------------------------------------
         pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq="B")
-
         daily_points = []
-        p_mean = current_price
-        p_min = current_price
-        p_max = current_price
-
-        # Realized daily volatility of historical returns (used for diffusion uncertainty)
-        hist_daily_vol = max(float(np.std(y)), 0.012)
 
         for step_i, dt in enumerate(pred_dates):
-            # Scale the latest feature vector
-            scaled_feat = self.scaler.transform(last_features)
+            t_frac = (step_i + 1) / H
+            # Smooth momentum path scaling
+            drift_t = r_median * (t_frac ** 0.85)
 
-            # Predict next day's 10th, 50th, and 90th percentile returns
-            r_median = float(self.model_median.predict(scaled_feat)[0])
-            r_lower = float(self.model_lower.predict(scaled_feat)[0])
-            r_upper = float(self.model_upper.predict(scaled_feat)[0])
+            # Volatility expansion scales as sqrt of time
+            spread_factor = np.sqrt((step_i + 1) / H)
+            lower_spread = (r_lower - r_median) * spread_factor
+            upper_spread = (r_upper - r_median) * spread_factor
 
-            # In financial time series, extreme daily return predictions quickly compound into
-            # unrealistic multi-week divergences. We apply exponential mean-reversion dampening:
-            # Short-term momentum fades gracefully towards the long-term trend as the horizon expands.
-            dampening = np.exp(-0.035 * step_i)
-            r_median = np.clip(r_median * dampening, -0.025, 0.025)
-            r_lower = np.clip(r_lower * dampening, -0.040, 0.010)
-            r_upper = np.clip(r_upper * dampening, -0.010, 0.040)
+            # Additional stochastic diffusion floor for robust envelope
+            diffusion_band = hist_daily_vol * np.sqrt(step_i + 1) * 0.40
 
-            # Monotonicity guard: Ensure lower <= median <= upper
-            if r_lower > r_median:
-                r_lower = r_median - 0.008
-            if r_upper < r_median:
-                r_upper = r_median + 0.008
-
-            # Time horizon uncertainty scaling: In stochastic processes, uncertainty 
-            # scales proportionally with the square root of time: sigma * sqrt(t)
-            horizon_spread = hist_daily_vol * np.sqrt(step_i + 1) * 0.70
-
-            # Compound forward prices from returns
-            p_mean = p_mean * np.exp(r_median)
-            p_min = min(p_min, p_mean * np.exp(r_lower - horizon_spread))
-            p_max = max(p_max, p_mean * np.exp(r_upper + horizon_spread))
+            p_step_mean = current_price * np.exp(drift_t)
+            p_step_min = current_price * np.exp(drift_t + lower_spread - diffusion_band)
+            p_step_max = current_price * np.exp(drift_t + upper_spread + diffusion_band)
 
             daily_points.append({
                 "date": dt.strftime("%Y-%m-%d"),
-                "mean": round(float(p_mean), 2),
-                "min": round(float(min(p_min, p_mean * 0.99)), 2),
-                "max": round(float(max(p_max, p_mean * 1.01)), 2),
+                "mean": round(float(p_step_mean), 2),
+                "min": round(float(min(p_step_min, p_step_mean * 0.99)), 2),
+                "max": round(float(max(p_step_max, p_step_mean * 1.01)), 2),
             })
-
-            # Roll the predicted return into the feature vector for recursive step
-            last_features[0, 0] = r_median
 
         # -------------------------------------------------------------
         # 4. Compute Horizon Aggregated Summary Metrics

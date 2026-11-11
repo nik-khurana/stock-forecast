@@ -53,7 +53,11 @@ class RidgeModel:
         Trains Ridge on historical technical indicators and projects n_days trading days forward.
         """
         data = df_features.copy()
-        data["target_return"] = np.log(data["close"] / data["close"].shift(1)).shift(-1)
+        # -------------------------------------------------------------
+        # 1. Define Multi-Horizon Forward Return Target with Recency Weighting
+        # -------------------------------------------------------------
+        H = max(5, min(n_days, 21))
+        data["target_return"] = np.log(data["close"].shift(-H) / data["close"])
         train_data = data.dropna(subset=["target_return"] + feature_cols).reset_index(drop=True)
 
         if len(train_data) < 30:
@@ -62,55 +66,53 @@ class RidgeModel:
         X = train_data[feature_cols].values
         y = train_data["target_return"].values
 
+        # Exponential Recency Weighting (half-life = 90 trading days)
+        half_life = 90
+        n_samples = len(train_data)
+        sample_weights = np.exp(-np.log(2) * (n_samples - 1 - np.arange(n_samples)) / half_life)
+        sample_weights = sample_weights / np.mean(sample_weights)
+
         # Scale features so L2 penalty is applied uniformly across features with different units
         X_scaled = self.scaler.fit_transform(X)
-        self.model.fit(X_scaled, y)
+        self.model.fit(X_scaled, y, sample_weight=sample_weights)
 
         # -------------------------------------------------------------
-        # 1. Compute Empirical Residual Standard Error (RSE)
+        # 2. Compute Empirical Residual Standard Error (RSE)
         # -------------------------------------------------------------
         preds = self.model.predict(X_scaled)
         residuals = y - preds
-        # Ensure minimum residual std floor of 1.2% daily volatility
-        residual_std = max(float(np.std(residuals)), 0.012)
+        # Ensure minimum residual std floor
+        residual_std = max(float(np.std(residuals)), 0.025)
 
         # -------------------------------------------------------------
-        # 2. Multi-Step Projection Loop (n_days Business Days)
+        # 3. Predict Forward Multi-Horizon Return & Continuous Trajectory
         # -------------------------------------------------------------
-        last_features = X[-1:].copy()
-        pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq="B")
-
-        daily_points = []
-        p_mean = current_price
-        p_min = current_price
-        p_max = current_price
+        last_features = X_scaled[-1:]
+        r_pred = float(self.model.predict(last_features)[0])
+        r_pred = float(np.clip(r_pred, -0.40, 0.40))
 
         # Standard normal critical value for 90% two-tailed confidence interval is 1.645
         z_score = 1.645
+        pred_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq="B")
+        daily_points = []
 
         for step_i, dt in enumerate(pred_dates):
-            scaled_feat = self.scaler.transform(last_features)
-            r_pred = float(self.model.predict(scaled_feat)[0])
-
-            # Apply momentum decay dampening over the forward horizon
-            dampening = np.exp(-0.035 * step_i)
-            r_pred = np.clip(r_pred * dampening, -0.020, 0.020)
+            t_frac = (step_i + 1) / H
+            drift_t = r_pred * (t_frac ** 0.85)
 
             # Uncertainty expands as sqrt of the forecast step (diffusion process)
-            horizon_spread = residual_std * z_score * np.sqrt(step_i + 1) * 0.70
+            horizon_spread = residual_std * z_score * np.sqrt((step_i + 1) / H)
 
-            p_mean = p_mean * np.exp(r_pred)
-            p_min = min(p_min, p_mean * np.exp(-horizon_spread))
-            p_max = max(p_max, p_mean * np.exp(horizon_spread))
+            p_step_mean = current_price * np.exp(drift_t)
+            p_step_min = current_price * np.exp(drift_t - horizon_spread)
+            p_step_max = current_price * np.exp(drift_t + horizon_spread)
 
             daily_points.append({
                 "date": dt.strftime("%Y-%m-%d"),
-                "mean": round(float(p_mean), 2),
-                "min": round(float(min(p_min, p_mean * 0.99)), 2),
-                "max": round(float(max(p_max, p_mean * 1.01)), 2),
+                "mean": round(float(p_step_mean), 2),
+                "min": round(float(min(p_step_min, p_step_mean * 0.99)), 2),
+                "max": round(float(max(p_step_max, p_step_mean * 1.01)), 2),
             })
-
-            last_features[0, 0] = r_pred
 
         # -------------------------------------------------------------
         # 3. Horizon Aggregated Metrics
