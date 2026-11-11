@@ -144,7 +144,7 @@
 
     const container = document.createElement("div");
     container.id = "ai-copilot-container";
-    container.className = "relative pointer-events-auto select-none";
+    container.className = "relative pointer-events-auto";
 
     const isPortfolio = window.location.pathname.includes("portfolio") || !!document.getElementById("portfolio-holdings-tbody");
 
@@ -152,7 +152,7 @@
       <!-- Floating Trigger Button -->
       <button
         id="ai-copilot-toggle-btn"
-        class="fixed bottom-6 right-6 z-40 flex items-center space-x-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 text-white shadow-2xl hover:shadow-indigo-500/30 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 group border border-white/20"
+        class="fixed bottom-6 right-6 z-40 flex items-center space-x-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 text-white shadow-2xl hover:shadow-indigo-500/30 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 group border border-white/20 select-none"
         title="StockCast AI Financial Analyst Copilot"
       >
         <div class="relative">
@@ -171,7 +171,7 @@
         class="fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-2rem)] h-[620px] max-h-[85vh] rounded-3xl apple-glass border border-black/10 dark:border-white/10 shadow-2xl flex flex-col overflow-hidden transition-all duration-300 opacity-0 pointer-events-none translate-y-6"
       >
         <!-- Top Drawer Header -->
-        <div class="p-4 pb-3 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between bg-black/[0.02] dark:bg-white/[0.02]">
+        <div class="p-4 pb-3 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between bg-black/[0.02] dark:bg-white/[0.02] select-none">
           <div class="flex items-center space-x-2.5">
             <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
               <i data-lucide="bot" class="w-4 h-4"></i>
@@ -191,7 +191,7 @@
             <button
               id="ai-privacy-toggle-btn"
               type="button"
-              class="px-2 py-1 rounded-full text-[10px] font-bold border transition flex items-center space-x-1 ${anonymizeMode ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}"
+              class="px-2 py-1 rounded-full text-[10px] font-bold border transition flex items-center space-x-1 select-none ${anonymizeMode ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}"
               title="Click to toggle financial anonymity shield"
             >
               <i data-lucide="shield" class="w-3 h-3"></i>
@@ -202,7 +202,7 @@
             <button
               id="ai-settings-toggle-btn"
               type="button"
-              class="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition"
+              class="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition select-none"
               title="Configure Free API Provider Key (Google Gemini / Groq Cloud)"
             >
               <i data-lucide="settings" class="w-3.5 h-3.5"></i>
@@ -212,7 +212,7 @@
             <button
               id="ai-copilot-close-btn"
               type="button"
-              class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition"
+              class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition select-none"
               title="Close Copilot"
             >
               <i data-lucide="x" class="w-4 h-4"></i>
@@ -221,7 +221,7 @@
         </div>
 
         <!-- Privacy & Free Tier Notice Ribbon -->
-        <div class="px-4 py-1.5 bg-black/[0.03] dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+        <div class="px-4 py-1.5 bg-black/[0.03] dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 select-none">
           <div class="flex items-center space-x-1.5 truncate">
             <i data-lucide="lock" class="w-3 h-3 text-emerald-500 flex-shrink-0"></i>
             <span class="truncate" id="ai-privacy-ribbon-text">
@@ -254,17 +254,17 @@
                 id="ai-custom-key-input"
                 placeholder="Paste AI key (e.g. AIzaSy... or gsk_...)"
                 value="${customApiKey}"
-                class="flex-1 px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                class="flex-1 px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono select-text"
               />
               <button
                 type="button"
                 id="ai-save-key-btn"
-                class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition"
+                class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition select-none"
               >
                 Save
               </button>
             </div>
-            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 select-none">
               <span>Preferred Provider:</span>
               <select id="ai-provider-select" class="apple-glass rounded-lg px-2 py-0.5 text-[10px] text-slate-700 dark:text-slate-300 focus:outline-none">
                 <option value="auto" ${selectedProvider === 'auto' ? 'selected' : ''}>Auto (Best Available)</option>
@@ -277,29 +277,40 @@
         </div>
 
         <!-- Chat Messages Scroll Container -->
-        <div id="ai-copilot-messages" class="flex-1 overflow-y-auto p-4 space-y-3">
+        <div id="ai-copilot-messages" class="flex-1 overflow-y-auto p-4 space-y-3 select-text cursor-text">
           <!-- Initial Welcome Message from StockCast AI -->
           <div class="flex items-start space-x-2.5">
-            <div class="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <div class="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5 select-none">
               <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
             </div>
-            <div class="flex-1 p-3 rounded-2xl rounded-tl-sm bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05] text-xs text-slate-800 dark:text-slate-200 space-y-2 leading-relaxed">
+            <div class="flex-1 p-3 rounded-2xl rounded-tl-sm bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05] text-xs text-slate-800 dark:text-slate-200 space-y-2 leading-relaxed select-text cursor-text">
               <p>
                 Hello! I am your <strong>StockCast AI Financial Copilot</strong>. I am synced directly with your live machine learning forecasts, support floor cushions, and milestone trajectories.
               </p>
-              <div class="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-600 dark:text-emerald-400 flex items-start space-x-1.5">
-                <i data-lucide="shield-check" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5"></i>
+              <div class="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-600 dark:text-emerald-400 flex items-start space-x-1.5 select-text">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5 select-none"></i>
                 <span><strong>Privacy Shield Active</strong>: Exact balances are never exposed. External AI only sees relative percentage weights and probabilistic drift.</span>
               </div>
               <p class="text-[11px] text-slate-500 dark:text-slate-400">
                 Click any suggestion chip below or type a custom question!
               </p>
+              <div class="pt-1.5 flex items-center justify-end select-none">
+                <button
+                  type="button"
+                  class="ai-copy-btn px-2 py-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-indigo-500 transition flex items-center space-x-1 cursor-pointer"
+                  title="Copy welcome intro"
+                  data-copy="Hello! I am your StockCast AI Financial Copilot. I am synced directly with your live machine learning forecasts, support floor cushions, and milestone trajectories."
+                >
+                  <i data-lucide="copy" class="w-3 h-3"></i>
+                  <span class="copy-label font-sans text-[10px] font-semibold">Copy</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Quick Question Chips -->
-        <div class="px-3 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/[0.04] dark:border-white/[0.04] flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px]">
+        <div class="px-3 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/[0.04] dark:border-white/[0.04] flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px] select-none">
           ${isPortfolio ? `
             <button type="button" class="ai-prompt-chip px-2.5 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/30 whitespace-nowrap transition" data-prompt="When will I hit my financial milestone target?">🎯 Milestone Date?</button>
             <button type="button" class="ai-prompt-chip px-2.5 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/30 whitespace-nowrap transition" data-prompt="What is the 3-year outlook for my portfolio?">🔮 3-Year Outlook</button>
@@ -451,6 +462,15 @@
       input.value = "";
       sendUserMessage(text);
     });
+
+    // Copy Button for Static / Welcome messages
+    document.querySelectorAll(".ai-copy-btn[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const copyVal = btn.getAttribute("data-copy");
+        copyTextToClipboard(copyVal, btn);
+      });
+    });
   }
 
   function appendUserMessage(text) {
@@ -460,10 +480,10 @@
     const div = document.createElement("div");
     div.className = "flex items-start justify-end space-x-2";
     div.innerHTML = `
-      <div class="max-w-[85%] p-3 rounded-2xl rounded-tr-sm bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-xs leading-relaxed shadow-sm">
+      <div class="max-w-[85%] p-3 rounded-2xl rounded-tr-sm bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-xs leading-relaxed shadow-sm select-text cursor-text">
         ${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
       </div>
-      <div class="w-6 h-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center flex-shrink-0 text-[10px] font-bold mt-0.5">
+      <div class="w-6 h-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center flex-shrink-0 text-[10px] font-bold mt-0.5 select-none">
         U
       </div>
     `;
@@ -477,7 +497,7 @@
 
     const div = document.createElement("div");
     div.id = "ai-typing-indicator";
-    div.className = "flex items-start space-x-2.5";
+    div.className = "flex items-start space-x-2.5 select-none";
     div.innerHTML = `
       <div class="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5">
         <i data-lucide="sparkles" class="w-3.5 h-3.5 animate-spin"></i>
@@ -495,6 +515,57 @@
     return div;
   }
 
+  function copyTextToClipboard(text, btnElement) {
+    if (!text) return;
+    const onSuccess = () => {
+      if (btnElement) {
+        const label = btnElement.querySelector(".copy-label");
+        const icon = btnElement.querySelector("i");
+        if (label) label.textContent = "Copied!";
+        if (icon) {
+          icon.setAttribute("data-lucide", "check");
+          if (window.lucide) lucide.createIcons();
+        }
+        btnElement.classList.add("text-emerald-500");
+        setTimeout(() => {
+          if (label) label.textContent = "Copy";
+          if (icon) {
+            icon.setAttribute("data-lucide", "copy");
+            if (window.lucide) lucide.createIcons();
+          }
+          btnElement.classList.remove("text-emerald-500");
+        }, 2000);
+      }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+        fallbackCopyText(text);
+        onSuccess();
+      });
+    } else {
+      fallbackCopyText(text);
+      onSuccess();
+    }
+  }
+
+  function fallbackCopyText(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } catch (e) {
+      console.warn("Fallback copy failed", e);
+    }
+    document.body.removeChild(ta);
+  }
+
   function appendBotMessage(markdown, provider, anonymized) {
     const messages = document.getElementById("ai-copilot-messages");
     if (!messages) return;
@@ -507,18 +578,39 @@
     const parsedHtml = renderSimpleMarkdown(textToRender);
 
     div.innerHTML = `
-      <div class="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+      <div class="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5 select-none">
         <i data-lucide="bot" class="w-3.5 h-3.5"></i>
       </div>
-      <div class="flex-1 max-w-[88%] p-3.5 rounded-2xl rounded-tl-sm bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05] text-xs text-slate-800 dark:text-slate-200 leading-relaxed space-y-1">
-        ${parsedHtml}
-        <div class="pt-2 mt-2 border-t border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[9px] text-slate-400 font-mono">
+      <div class="flex-1 max-w-[88%] p-3.5 rounded-2xl rounded-tl-sm bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05] text-xs text-slate-800 dark:text-slate-200 leading-relaxed space-y-1 select-text cursor-text">
+        <div class="select-text">
+          ${parsedHtml}
+        </div>
+        <div class="pt-2 mt-2 border-t border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[9px] text-slate-400 font-mono select-none">
           <span>Provider: ${provider || 'StockCast Quant Engine'}</span>
-          <span>${anonymized ? '🛡️ Anonymized' : '🔓 Full Data'}</span>
+          <div class="flex items-center space-x-2">
+            <button
+              type="button"
+              class="ai-copy-btn px-2 py-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-indigo-500 transition flex items-center space-x-1 cursor-pointer"
+              title="Copy response to clipboard"
+            >
+              <i data-lucide="copy" class="w-3 h-3"></i>
+              <span class="copy-label font-sans text-[10px] font-semibold">Copy</span>
+            </button>
+            <span>${anonymized ? '🛡️ Anonymized' : '🔓 Full Data'}</span>
+          </div>
         </div>
       </div>
     `;
     messages.appendChild(div);
+
+    const copyBtn = div.querySelector(".ai-copy-btn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        copyTextToClipboard(textToRender, copyBtn);
+      });
+    }
+
     if (window.lucide) lucide.createIcons();
     messages.scrollTop = messages.scrollHeight;
   }
