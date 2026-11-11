@@ -91,3 +91,18 @@ def is_alpaca_configured() -> bool:
     if "your_alpaca" in key_id.lower() or "your_alpaca" in secret.lower():
         return False
     return True
+
+def get_gemini_api_key() -> str:
+    """Returns Google Gemini API key if configured."""
+    reload_env()
+    return os.getenv("GEMINI_API_KEY", "").strip()
+
+def get_groq_api_key() -> str:
+    """Returns Groq Cloud API key if configured."""
+    reload_env()
+    return os.getenv("GROQ_API_KEY", "").strip()
+
+def get_openrouter_api_key() -> str:
+    """Returns OpenRouter API key if configured."""
+    reload_env()
+    return os.getenv("OPENROUTER_API_KEY", "").strip()

@@ -709,14 +709,14 @@
         <div class="lg:col-span-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-4">
           <div class="flex items-center justify-between">
             <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Projected Hit Date</span>
-            <span id="milestone-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">On Track</span>
+            <span id="milestone-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20">Awaiting Holdings</span>
           </div>
           <div>
             <div id="milestone-projected-date" class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
-              Calculating...
+              Add Positions
             </div>
             <div id="milestone-time-remaining" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-              Estimated 0 months away
+              Enter stock holdings above to project your target date
             </div>
           </div>
 
@@ -1092,10 +1092,13 @@
   </div>
 
   <!-- Apple-Style Floating Toast Notification Container -->
-  <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+  <div id="toast-container" class="fixed bottom-20 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- Dedicated Portfolio JavaScript Engine -->
   <script src="/static/portfolio.js"></script>
+
+  <!-- StockCast Institutional AI Analyst Copilot -->
+  <script src="/static/ai_copilot.js"></script>
 </body>
 </html>
 

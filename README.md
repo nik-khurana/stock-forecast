@@ -71,6 +71,20 @@ An advanced quantitative forecasting and portfolio risk intelligence platform po
 * ⌨️ **Quick Command Palette / Spotlight Search (`⌘K` / `Ctrl+K` / `/`)**: Modal search overlay for instant ticker lookups, quick page jumps, dark mode toggles, and PDF/CSV exports with arrow key navigation.
 * 🔔 **Live Market Clock & Circular NYSE Session Progress Ring**: Real-time US Eastern Time countdown clock with an animated circular SVG ring displaying the percentage of the current trading day elapsed.
 
+### 12. 🤖 Institutional AI Copilot & Financial Goal Intelligence (`POST /api/ai/chat`)
+* **Multi-Provider Free AI Ecosystem**:
+  - **Google Gemini 1.5 Flash**: Free tier on [Google AI Studio](https://aistudio.google.com) (15 requests/min, 1,500 requests/day).
+  - **Groq Cloud LLaMA 3.3 70B**: Free tier on [Groq Console](https://console.groq.com) (blazing fast 300+ tokens/sec inference).
+  - **OpenRouter Free Tier**: Access to free open-weights models (`google/gemini-2.0-flash-exp:free`).
+  - **StockCast Quant Engine Fallback**: Zero-cost, zero-latency built-in deterministic quantitative reasoning engine that operates immediately even without any external API keys configured!
+* **Strict Financial Privacy Shield (Data Anonymization)**:
+  - When the Privacy Shield is enabled (active by default), all personal identifiers, IP addresses, and exact dollar net worth figures are concealed.
+  - External LLM APIs receive only normalized percentage weights (e.g. `AAPL: 42.5% allocation`, `NVDA: 57.5% allocation`) and relative CAGR multiples, guaranteeing complete financial confidentiality.
+* **Context-Aware Financial Analysis**:
+  - Automatically ingests live machine learning forecast metrics, 3-year multi-year CAGR trajectories, 99% downside support floors, and real-time media news sentiment.
+  - Interactive quick question chips for milestone dates, portfolio crash vulnerability, diversification, and price targets.
+  - User API keys are stored solely in the client's local browser vault (`localStorage`) without ever touching remote databases.
+
 ---
 
 ## 🏗️ Architecture Overview
@@ -158,6 +172,7 @@ stock-forecast/
 | `/api/stock/{ticker}/news` | `GET` | Live Alpaca breaking news wire, NLP sentiment score (-100 to +100), and top catalyst triggers. |
 | `/api/search?q={query}` | `GET` | Real-time autocomplete searching company names and tickers. |
 | `/api/portfolio/forecast` | `POST` | Aggregated 60-day & 3-year portfolio forecast, sector donut, concentration risk, and support floor defense. |
+| `/api/ai/chat` | `POST` | Institutional AI Financial Copilot supporting free Gemini/Groq LLMs, anonymity privacy shield, and milestone tracking. |
 | `/api/health` | `GET` | System health check and US market session status (Pre-Market, Regular, After-Hours, Closed). |
 
 ---

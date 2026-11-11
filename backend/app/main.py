@@ -52,6 +52,7 @@ from backend.app.forecast_service import ForecastService
 from backend.app.company_database import search_companies, resolve_ticker, sync_alpaca_assets_live
 from backend.app.sentiment_service import SentimentService
 from backend.app.portfolio_optimizer import PortfolioOptimizer
+from backend.app.ai_chat_service import ai_chat_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -513,6 +514,43 @@ def stress_test_portfolio_endpoint(req: StressTestRequest, request: Request):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Portfolio stress test failed."
+        )
+
+
+
+class AIChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000, description="User's question or query")
+    context: Dict[str, Any] = Field(default_factory=dict, description="Active page / portfolio / stock context")
+    anonymize: bool = Field(default=True, description="Strict privacy mode: hide exact dollar amounts and identity")
+    api_key: Optional[str] = Field(default=None, description="Optional custom client-provided API key")
+    provider: Literal["auto", "gemini", "groq", "openrouter"] = "auto"
+
+@app.post("/api/ai/chat")
+async def chat_with_ai(req: AIChatRequest, request: Request):
+    """
+    Financial Copilot AI Chat:
+    - Provides real-time quantitative reasoning, portfolio milestone tracking,
+      support floor checks, and multi-year outlook analysis.
+    - Strict privacy shield: when anonymize=True, hides all exact dollar amounts and balances.
+    - Zero cost: Works with free Google Gemini API, free Groq Cloud API, or internal quant engine.
+    """
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
+    enforce_rate_limit(client_ip)
+    try:
+        res = await anyio.to_thread.run_sync(
+            ai_chat_service.generate_chat_response,
+            req.message,
+            req.context,
+            req.anonymize,
+            req.api_key,
+            req.provider
+        )
+        return res
+    except Exception as exc:
+        logger.error("AI chat error: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AI Assistant encountered an error processing your request."
         )
 
 

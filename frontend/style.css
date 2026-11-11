@@ -507,6 +507,16 @@ html:not(.dark) .chart-loading-overlay {
   transform-origin: 50% 50%;
 }
 
+/* Hide scrollbar for clean chip strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+
 
 
 

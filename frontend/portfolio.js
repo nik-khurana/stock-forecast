@@ -237,6 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateMarketClock();
   setInterval(updateMarketClock, 30000); // Update market clock progress ring every 30s
   initCommandPalette();
+  initGoalMilestoneCalculator();
 
   // If vault is locked, show unlock modal on initial visit
   if (isVaultLocked) {
@@ -1527,6 +1528,7 @@ function renderHoldingsTable() {
   });
 
   if (window.lucide) lucide.createIcons();
+  updateGoalMilestoneCalculator(portfolioForecastData);
   applyPrivacyMask();
 }
 
@@ -1596,6 +1598,7 @@ function clearPortfolioForecastUI() {
   if (sectorList) sectorList.innerHTML = "";
   const rebalTbody = document.getElementById("rebalancing-tbody");
   if (rebalTbody) rebalTbody.innerHTML = "";
+  updateGoalMilestoneCalculator(null);
   syncPortfolioLiveStreaming();
 }
 
@@ -2617,15 +2620,41 @@ function updatePriceColumnHeader(isOpen, session = "regular") {
 }
 
 /**
+ * Calculates current aggregate portfolio equity either from live forecast
+ * or directly from holdings basis if forecast is loading or offline.
+ */
+function calculateCurrentPortfolioEquity() {
+  if (portfolioForecastData && typeof portfolioForecastData.current_portfolio_value === "number" && portfolioForecastData.current_portfolio_value > 0) {
+    return portfolioForecastData.current_portfolio_value;
+  }
+  if (portfolioForecastData && typeof portfolioForecastData.total_cost_basis === "number" && portfolioForecastData.total_cost_basis > 0) {
+    return portfolioForecastData.total_cost_basis;
+  }
+  if (Array.isArray(portfolioHoldings) && portfolioHoldings.length > 0) {
+    return portfolioHoldings.reduce((sum, h) => {
+      const sh = parseFloat(h.shares) || 0;
+      const bp = parseFloat(h.buy_price) || 0;
+      return sum + (sh * bp);
+    }, 0);
+  }
+  return 0;
+}
+
+/**
  * Financial Goal Milestone & Time-to-Target Calculator
  */
-function updateGoalMilestoneCalculator(data) {
-  if (!data) return;
+function updateGoalMilestoneCalculator(data = null) {
+  if (data) {
+    portfolioForecastData = data;
+  }
 
-  const currentVal = data.current_portfolio_value || data.total_cost_basis || 0;
-  const cagr = (data.portfolio_3y_summary && typeof data.portfolio_3y_summary.cagr_3y_pct === "number")
-    ? data.portfolio_3y_summary.cagr_3y_pct
-    : 0;
+  const currentVal = calculateCurrentPortfolioEquity();
+  const cagr = (portfolioForecastData && portfolioForecastData.portfolio_3y_summary && typeof portfolioForecastData.portfolio_3y_summary.cagr_3y_pct === "number")
+    ? portfolioForecastData.portfolio_3y_summary.cagr_3y_pct
+    : null;
+  const monthlyTrajectory = (portfolioForecastData && Array.isArray(portfolioForecastData.portfolio_3y_monthly))
+    ? portfolioForecastData.portfolio_3y_monthly
+    : null;
 
   const targetInput = document.getElementById("milestone-target-input");
   const slider = document.getElementById("milestone-slider");
@@ -2639,26 +2668,35 @@ function updateGoalMilestoneCalculator(data) {
   const targetValElem = document.getElementById("milestone-target-val");
 
   if (cagrBadge) {
-    const sign = cagr >= 0 ? "+" : "";
-    cagrBadge.textContent = `Projected CAGR: ${sign}${cagr.toFixed(2)}%`;
-    cagrBadge.className = cagr >= 0
-      ? "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-      : "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+    if (cagr !== null) {
+      const sign = cagr >= 0 ? "+" : "";
+      cagrBadge.textContent = `Projected CAGR: ${sign}${cagr.toFixed(2)}%`;
+      cagrBadge.className = cagr >= 0
+        ? "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+        : "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+    } else {
+      cagrBadge.textContent = "Compounding Horizon";
+      cagrBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20";
+    }
   }
 
   if (currValElem) {
     currValElem.textContent = `$${currentVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   }
 
-  function recalculateMilestone(target) {
+  window.recalculateMilestone = function(target) {
     milestoneTarget = target;
     if (targetValElem) {
       targetValElem.textContent = `$${target.toLocaleString()}`;
     }
 
-    if (currentVal <= 0) {
-      if (dateElem) dateElem.textContent = "Positions Required";
-      if (timeElem) timeElem.textContent = "Add stock holdings above to calculate time-to-target";
+    if (currentVal <= 0 || !Array.isArray(portfolioHoldings) || portfolioHoldings.length === 0) {
+      if (statusBadge) {
+        statusBadge.textContent = "Awaiting Holdings";
+        statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20";
+      }
+      if (dateElem) dateElem.textContent = "Add Positions";
+      if (timeElem) timeElem.textContent = "Enter stock holdings above to calculate milestone time-to-target";
       if (progressBar) progressBar.style.width = "0%";
       if (progressPctElem) progressPctElem.textContent = "0.0%";
       return;
@@ -2670,54 +2708,108 @@ function updateGoalMilestoneCalculator(data) {
 
     if (currentVal >= target) {
       if (statusBadge) {
-        statusBadge.textContent = "Achieved 🎉";
+        statusBadge.textContent = "Goal Achieved 🎉";
         statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
       }
-      if (dateElem) dateElem.textContent = "Goal Reached!";
-      if (timeElem) timeElem.textContent = "Target already achieved with your current portfolio equity";
+      if (dateElem) dateElem.textContent = "Target Reached!";
+      if (timeElem) timeElem.textContent = `Current portfolio equity ($${currentVal.toLocaleString(undefined, {maximumFractionDigits: 0})}) exceeds your milestone target`;
       return;
     }
 
-    if (cagr <= 0) {
+    // 1. Check exact 36-month ML monthly trajectory first
+    let hitMonthObj = null;
+    if (monthlyTrajectory && monthlyTrajectory.length > 0) {
+      hitMonthObj = monthlyTrajectory.find(m => (m.mean || 0) >= target);
+    }
+
+    if (hitMonthObj) {
+      const mIdx = hitMonthObj.month || 1;
       if (statusBadge) {
-        statusBadge.textContent = "Flat / Bearish";
+        statusBadge.textContent = mIdx <= 12 ? "Near-Term Target 🎯" : "On Track 🚀";
+        statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
+      }
+      if (dateElem) dateElem.textContent = hitMonthObj.date || `Month ${mIdx}`;
+      if (timeElem) {
+        timeElem.textContent = mIdx <= 12
+          ? `Estimated in ~${mIdx} month${mIdx > 1 ? "s" : ""} based on 36-month ML forecast`
+          : `Estimated in ~${(mIdx / 12).toFixed(1)} years (${mIdx} months) based on 36-month ML forecast`;
+      }
+      return;
+    }
+
+    // 2. Beyond 36 months, calculate using compound annual growth rate (CAGR)
+    if (cagr !== null && cagr > 0) {
+      const r = cagr / 100;
+      const years = Math.log(target / currentVal) / Math.log(1 + r);
+      const totalMonths = Math.max(1, Math.round(years * 12));
+
+      const hitDate = new Date();
+      hitDate.setMonth(hitDate.getMonth() + totalMonths);
+      const dateStr = hitDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+      if (statusBadge) {
+        statusBadge.textContent = totalMonths <= 60 ? "Long-Term Goal 🔭" : "Aspirational Goal 🌟";
+        statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-500 border border-indigo-500/30";
+      }
+
+      if (dateElem) dateElem.textContent = dateStr;
+      if (timeElem) {
+        timeElem.textContent = `Estimated in ~${years.toFixed(1)} years (${totalMonths} months) at ${cagr.toFixed(1)}% CAGR`;
+      }
+      return;
+    }
+
+    // 3. CAGR is zero or negative
+    if (cagr !== null && cagr <= 0) {
+      if (statusBadge) {
+        statusBadge.textContent = "Flat / Low Drift";
         statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30";
       }
-      if (dateElem) dateElem.textContent = "Trajectory Flat";
-      if (timeElem) timeElem.textContent = "Requires positive compound CAGR to calculate hit date";
+      if (dateElem) dateElem.textContent = "Requires Growth Drift";
+      const shortfall = target - currentVal;
+      if (timeElem) {
+        timeElem.textContent = `Target requires +$${shortfall.toLocaleString(undefined, {maximumFractionDigits: 0})} capital appreciation or contributions`;
+      }
       return;
     }
 
-    // Target = Current * (1 + CAGR/100)^Years
-    const r = cagr / 100;
+    // 4. Forecast still loading or not yet available: project with standard 10% market benchmark
+    const r = 0.10;
     const years = Math.log(target / currentVal) / Math.log(1 + r);
-    const totalMonths = Math.round(years * 12);
-
+    const totalMonths = Math.max(1, Math.round(years * 12));
     const hitDate = new Date();
     hitDate.setMonth(hitDate.getMonth() + totalMonths);
-    const dateStr = hitDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const dateStr = hitDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
     if (statusBadge) {
-      statusBadge.textContent = totalMonths <= 36 ? "On Track 🚀" : "Long-Term Goal";
-      statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-500 border border-indigo-500/30";
+      statusBadge.textContent = "Projecting...";
+      statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-500 border border-cyan-500/30 animate-pulse";
     }
-
-    if (dateElem) dateElem.textContent = dateStr;
+    if (dateElem) dateElem.textContent = `~${dateStr}`;
     if (timeElem) {
-      if (years >= 1) {
-        timeElem.textContent = `Estimated in ~${years.toFixed(1)} years (${totalMonths} months) at ${cagr.toFixed(1)}% CAGR`;
-      } else {
-        timeElem.textContent = `Estimated in ~${totalMonths} months at ${cagr.toFixed(1)}% CAGR`;
-      }
+      timeElem.textContent = `Estimated in ~${years.toFixed(1)} years (${totalMonths} mos) at 10% benchmark (*updating live...)`;
     }
-  }
+  };
+
+  const currentTarget = targetInput ? (parseFloat(targetInput.value) || milestoneTarget || 50000) : (milestoneTarget || 50000);
+  window.recalculateMilestone(currentTarget);
+}
+
+/**
+ * Initializes listeners for milestone calculator inputs and presets.
+ */
+function initGoalMilestoneCalculator() {
+  const targetInput = document.getElementById("milestone-target-input");
+  const slider = document.getElementById("milestone-slider");
 
   if (targetInput && !targetInput.dataset.listenerAttached) {
     targetInput.dataset.listenerAttached = "true";
     targetInput.addEventListener("input", (e) => {
       const val = parseFloat(e.target.value) || 1000;
       if (slider) slider.value = Math.min(250000, val);
-      recalculateMilestone(val);
+      if (typeof window.recalculateMilestone === "function") {
+        window.recalculateMilestone(val);
+      }
     });
   }
 
@@ -2726,7 +2818,9 @@ function updateGoalMilestoneCalculator(data) {
     slider.addEventListener("input", (e) => {
       const val = parseFloat(e.target.value) || 1000;
       if (targetInput) targetInput.value = val;
-      recalculateMilestone(val);
+      if (typeof window.recalculateMilestone === "function") {
+        window.recalculateMilestone(val);
+      }
     });
   }
 
@@ -2737,13 +2831,14 @@ function updateGoalMilestoneCalculator(data) {
         const val = parseFloat(btn.getAttribute("data-target")) || 50000;
         if (targetInput) targetInput.value = val;
         if (slider) slider.value = Math.min(250000, val);
-        recalculateMilestone(val);
+        if (typeof window.recalculateMilestone === "function") {
+          window.recalculateMilestone(val);
+        }
       });
     }
   });
 
-  const initialTarget = targetInput ? (parseFloat(targetInput.value) || 50000) : 50000;
-  recalculateMilestone(initialTarget);
+  updateGoalMilestoneCalculator(portfolioForecastData);
 }
 
 /**
