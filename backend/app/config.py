@@ -100,7 +100,11 @@ def get_gemini_api_key() -> str:
 def get_groq_api_key() -> str:
     """Returns Groq Cloud API key if configured."""
     reload_env()
-    return os.getenv("GROQ_API_KEY", "").strip()
+    return (
+        os.getenv("GROQ_API_KEY", "").strip()
+        or os.getenv("GROP_API_KEY", "").strip()
+        or os.getenv("GROQ_KEY", "").strip()
+    )
 
 def get_openrouter_api_key() -> str:
     """Returns OpenRouter API key if configured."""

@@ -215,8 +215,8 @@ def validate_ticker(ticker: str) -> str:
     clean_ticker = ticker.upper().strip()
     if not clean_ticker or not TICKER_REGEX.match(clean_ticker):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ticker symbol '{ticker}'. Must be 1-10 uppercase alphanumeric characters (e.g. AAPL, MSFT, BRK.B)."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Stock symbol '{ticker}' does not exist or is invalid. Please check the ticker symbol."
         )
     return clean_ticker
 
@@ -314,14 +314,21 @@ def get_stock_overview(ticker: str, request: Request):
     """
     Fetches the latest market quote snapshot for a ticker (or company name).
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
     enforce_rate_limit(client_ip)
     resolved = resolve_ticker(ticker)
     clean_ticker = validate_ticker(resolved)
 
     try:
         quote = alpaca_client.get_latest_quote(clean_ticker)
+        if not quote or quote.get("price") is None or quote.get("error") == "not_found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Stock symbol '{clean_ticker}' does not exist or has no active trading data. Please check the ticker symbol."
+            )
         return quote
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error retrieving overview for %s: %s", clean_ticker, exc)
         raise HTTPException(
@@ -342,7 +349,7 @@ def get_forecast(
     and returns 30-day daily points + 3-year monthly breakdown.
     Supports ticker symbols (AAPL) and company names (Apple).
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
     enforce_rate_limit(client_ip)
     resolved = resolve_ticker(ticker)
     clean_ticker = validate_ticker(resolved)
@@ -350,6 +357,13 @@ def get_forecast(
     try:
         result = forecast_service.generate_forecast(clean_ticker, selected_model=model)
         return result
+    except (ValueError, FileNotFoundError) as ve:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(ve)
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error generating forecast for %s: %s", clean_ticker, exc, exc_info=True)
         raise HTTPException(
@@ -362,12 +376,20 @@ def get_stock_news(ticker: str, request: Request, limit: int = Query(6, ge=1, le
     """
     Returns live breaking headlines and quantitative NLP financial sentiment evaluation for a ticker.
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
     enforce_rate_limit(client_ip)
     resolved = resolve_ticker(ticker)
     clean_ticker = validate_ticker(resolved)
     try:
+        quote = alpaca_client.get_latest_quote(clean_ticker)
+        if not quote or quote.get("price") is None or quote.get("error") == "not_found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Stock symbol '{clean_ticker}' does not exist or has no active trading data."
+            )
         return SentimentService.evaluate_news_sentiment(clean_ticker)
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error retrieving news for %s: %s", clean_ticker, exc)
         raise HTTPException(
@@ -398,7 +420,7 @@ async def get_portfolio_forecast(req: PortfolioRequest, request: Request):
     monthly trajectory for the user's personal owned holdings.
     Guarded by _PORTFOLIO_QUEUE_LOCK to process requests sequentially without blowing Railway memory limits.
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
     enforce_rate_limit(client_ip)
 
     async with _PORTFOLIO_QUEUE_LOCK:
@@ -430,7 +452,7 @@ def optimize_portfolio_endpoint(req: OptimizeRequest, request: Request):
     Computes Modern Portfolio Theory (MPT) Efficient Frontier optimal allocations,
     Sharpe ratios, and dollar rebalancing recommendations.
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
     enforce_rate_limit(client_ip)
     try:
         norm_holdings = []
@@ -461,7 +483,7 @@ def stress_test_portfolio_endpoint(req: StressTestRequest, request: Request):
     """
     Simulates custom macroeconomic shock on portfolio value and individual holdings based on CAPM Betas.
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = request.client.host if (request and request.client) else "127.0.0.1"
     enforce_rate_limit(client_ip)
     try:
         norm_holdings = []

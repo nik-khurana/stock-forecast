@@ -9,6 +9,7 @@ This module communicates with Alpaca's Market Data API (v2) to:
 """
 
 import time
+import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional, Tuple
@@ -16,6 +17,8 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import pandas as pd
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from backend.app.config import (
     get_alpaca_key_id,
@@ -140,15 +143,23 @@ class AlpacaClient:
                     return df, "demo_mode"
 
                 # Check for other API errors (e.g. rate limit 429 or ticker not found 404)
+                if resp.status_code == 404:
+                    logger.info("[AlpacaClient] Symbol %s not found on exchange (HTTP 404).", ticker)
+                    return pd.DataFrame(), "not_found"
+
                 if resp.status_code != 200:
-                    print(f"[AlpacaClient] Alpaca API error ({resp.status_code}): {resp.text}")
-                    df = self._generate_simulated_bars(ticker, years=years)
-                    return df, "demo_mode"
+                    logger.warning("[AlpacaClient] Alpaca API error (%d) for %s: %s", resp.status_code, ticker, resp.text)
+                    if not is_alpaca_configured():
+                        df = self._generate_simulated_bars(ticker, years=years)
+                        return df, "demo_mode"
+                    return pd.DataFrame(), "not_found"
 
                 data = resp.json()
-                bars = data.get("bars", [])
+                bars = data.get("bars")
                 if not bars:
-                    break
+                    # Alpaca returned no bars for this symbol
+                    logger.info("[AlpacaClient] Alpaca returned no bars for %s.", ticker)
+                    return pd.DataFrame(), "not_found"
 
                 all_bars.extend(bars)
 
@@ -157,10 +168,28 @@ class AlpacaClient:
                 if not page_token or len(all_bars) >= 1200:
                     break
 
-            if not all_bars or len(all_bars) < 80:
-                print(f"[AlpacaClient] Insufficient bars ({len(all_bars) if all_bars else 0}) returned for {ticker}. Falling back to simulation.")
-                df = self._generate_simulated_bars(ticker, years=years)
-                return df, "demo_mode"
+            if not all_bars:
+                return pd.DataFrame(), "not_found"
+
+            if len(all_bars) < 80:
+                logger.info("[AlpacaClient] Stock %s has %d bars (<80). Applying IPO baseline padding.", ticker, len(all_bars))
+                first_bar = all_bars[0]
+                needed = 80 - len(all_bars)
+                earliest_dt = pd.to_datetime(first_bar["t"])
+                padded_dates = pd.bdate_range(end=earliest_dt - pd.Timedelta(days=1), periods=needed)
+                padded_bars = [
+                    {
+                        "t": d.strftime("%Y-%m-%dT00:00:00Z"),
+                        "o": first_bar["o"],
+                        "h": first_bar["h"],
+                        "l": first_bar["l"],
+                        "c": first_bar["c"],
+                        "v": first_bar.get("v", 1000),
+                        "vw": first_bar.get("vw", first_bar["c"])
+                    }
+                    for d in padded_dates
+                ]
+                all_bars = padded_bars + all_bars
 
             # -------------------------------------------------------------
             # STEP 5: Format raw Alpaca bar response into Pandas DataFrame
@@ -262,7 +291,13 @@ class AlpacaClient:
                 if not price and latest_quote.get("ap") and latest_quote.get("bp"):
                     price = (latest_quote.get("ap") + latest_quote.get("bp")) / 2.0
                 if not price:
-                    return self._fallback_quote(ticker, current_session, is_extended)
+                    return {
+                        "ticker": ticker,
+                        "price": None,
+                        "error": "not_found",
+                        "source": "none",
+                        "session": current_session
+                    }
 
                 regular_close = daily_bar.get("c") or prev_daily_bar.get("c") or price
                 prev_close = prev_daily_bar.get("c") or price
@@ -295,10 +330,34 @@ class AlpacaClient:
                     "extended_change": ext_change,
                     "extended_change_pct": ext_change_pct
                 }
+            elif resp.status_code == 404:
+                return {
+                    "ticker": ticker,
+                    "price": None,
+                    "error": "not_found",
+                    "source": "none",
+                    "session": current_session
+                }
             else:
-                return self._fallback_quote(ticker, current_session, is_extended)
+                if not is_alpaca_configured():
+                    return self._fallback_quote(ticker, current_session, is_extended)
+                return {
+                    "ticker": ticker,
+                    "price": None,
+                    "error": f"alpaca_error_{resp.status_code}",
+                    "source": "none",
+                    "session": current_session
+                }
         except Exception:
-            return self._fallback_quote(ticker, current_session, is_extended)
+            if not is_alpaca_configured():
+                return self._fallback_quote(ticker, current_session, is_extended)
+            return {
+                "ticker": ticker,
+                "price": None,
+                "error": "connection_error",
+                "source": "none",
+                "session": current_session
+            }
 
     def get_stock_bundle(self, ticker: str, years: int = 3) -> Dict[str, Any]:
         """
@@ -311,6 +370,16 @@ class AlpacaClient:
             
             bars_df, data_source = fut_bars.result()
             quote = fut_quote.result()
+
+        if bars_df.empty or not quote or quote.get("price") is None or data_source == "not_found":
+            return {
+                "bars_df": pd.DataFrame(),
+                "data_source": "not_found",
+                "quote": quote or {"ticker": ticker, "price": None, "error": "not_found"},
+                "high_52w": None,
+                "low_52w": None,
+                "pos_52w_pct": None
+            }
 
         # Compute 52-week High / Low from the most recent 252 trading sessions (~1 year)
         recent_year = bars_df.iloc[-252:] if len(bars_df) >= 252 else bars_df
@@ -336,6 +405,14 @@ class AlpacaClient:
     def _fallback_quote(self, ticker: str, session: str = "closed", is_extended: bool = False) -> Dict[str, Any]:
         """Calculates quote metrics from historical bars when live snapshot is unavailable, with extended hours support."""
         bars_df, src = self.get_historical_bars(ticker, years=1)
+        if bars_df.empty:
+            return {
+                "ticker": ticker,
+                "price": None,
+                "error": "not_found",
+                "source": "none",
+                "session": session
+            }
         last_close = float(bars_df["close"].iloc[-1])
         prev_close = float(bars_df["close"].iloc[-2]) if len(bars_df) > 1 else last_close
 

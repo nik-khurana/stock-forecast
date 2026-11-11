@@ -168,6 +168,10 @@ class ForecastService:
         bars_df = bundle["bars_df"]
         data_source = bundle["data_source"]
         quote = bundle["quote"]
+
+        if bars_df is None or bars_df.empty or not quote or quote.get("price") is None or data_source == "not_found":
+            raise ValueError(f"Stock symbol '{ticker}' does not exist or has no active trading data. Please check the ticker symbol.")
+
         current_price = quote["price"]
         last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
 
@@ -551,7 +555,7 @@ class ForecastService:
                     bars_df = bundle.get("bars_df")
                     quote = bundle.get("quote")
 
-                    if bars_df is None or bars_df.empty or not quote:
+                    if bars_df is None or bars_df.empty or not quote or quote.get("price") is None or bundle.get("data_source") == "not_found":
                         msg = f"Symbol '{tk}': No exchange trading history found. Handled as unlisted / pre-IPO baseline."
                         logger.info(msg)
                         unlisted_holdings.append(h)

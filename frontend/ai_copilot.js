@@ -19,8 +19,13 @@
   try {
     const savedAnon = localStorage.getItem("stockcast_ai_anonymize");
     if (savedAnon !== null) anonymizeMode = savedAnon === "true";
-    customApiKey = localStorage.getItem("stockcast_ai_custom_key") || "";
+    customApiKey = (localStorage.getItem("stockcast_ai_custom_key") || "").trim();
     selectedProvider = localStorage.getItem("stockcast_ai_provider") || "auto";
+    if (customApiKey.startsWith("gsk_")) {
+      selectedProvider = "groq";
+    } else if (customApiKey.startsWith("AIzaSy")) {
+      selectedProvider = "gemini";
+    }
   } catch (e) {
     console.warn("Could not read local storage for AI preferences:", e);
   }
@@ -384,21 +389,43 @@
       settingsPanel?.classList.toggle("hidden");
     });
 
+    function autoDetectProvider(val) {
+      const v = (val || "").trim();
+      if (v.startsWith("gsk_")) return "groq";
+      if (v.startsWith("AIzaSy")) return "gemini";
+      if (v.startsWith("sk-or-")) return "openrouter";
+      return null;
+    }
+
+    customKeyInput?.addEventListener("input", (e) => {
+      const detected = autoDetectProvider(e.target.value);
+      if (detected && providerSelect) {
+        providerSelect.value = detected;
+        selectedProvider = detected;
+        const badge = document.getElementById("ai-active-provider-badge");
+        if (badge) {
+          badge.textContent = detected === "groq" ? "Groq LLaMA 3.3" : detected === "gemini" ? "Gemini 1.5" : "OpenRouter";
+        }
+      }
+    });
+
     // Save API Key
     saveKeyBtn?.addEventListener("click", () => {
       const keyVal = customKeyInput?.value.trim() || "";
-      const provVal = providerSelect?.value || "auto";
+      const detected = autoDetectProvider(keyVal);
+      const provVal = detected || providerSelect?.value || "auto";
       customApiKey = keyVal;
       selectedProvider = provVal;
+      if (providerSelect) providerSelect.value = provVal;
       localStorage.setItem("stockcast_ai_custom_key", keyVal);
       localStorage.setItem("stockcast_ai_provider", provVal);
       settingsPanel?.classList.add("hidden");
       
       const badge = document.getElementById("ai-active-provider-badge");
       if (badge) {
-        badge.textContent = provVal === "gemini" ? "Gemini 1.5" : provVal === "groq" ? "Groq LLaMA" : keyVal ? "Custom Key" : "Quant + Free AI";
+        badge.textContent = provVal === "groq" ? "Groq LLaMA 3.3" : provVal === "gemini" ? "Gemini 1.5" : keyVal ? "Custom Key" : "Quant + Free AI";
       }
-      appendSystemMessage(keyVal ? `Configured custom API key for ${provVal}.` : "Using server built-in free AI and quant engine.");
+      appendSystemMessage(keyVal ? `Connected key for ${provVal === "groq" ? "Groq LLaMA 3.3" : provVal}.` : "Using server built-in free AI and quant engine.");
     });
 
     providerSelect?.addEventListener("change", (e) => {
@@ -559,3 +586,4 @@
     injectCopilotUI();
   }
 })();
+

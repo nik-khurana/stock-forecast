@@ -111,6 +111,7 @@ class AIChatService:
     ) -> Dict[str, Any]:
         """
         Coordinates AI query generation across configured free providers or internal quant engine.
+        Automatically detects key type (e.g. gsk_ for Groq, AIzaSy for Gemini).
         """
         sanitized_context = self.sanitize_context_for_privacy(context, anonymize=anonymize)
         
@@ -122,12 +123,70 @@ class AIChatService:
             "not guaranteed financial advice."
         )
 
-        gemini_key = custom_api_key or config.get_gemini_api_key()
-        groq_key = custom_api_key or config.get_groq_api_key()
-        openrouter_key = custom_api_key or config.get_openrouter_api_key()
+        # Sanitize custom key
+        clean_key = (custom_api_key or "").strip().strip("\"'")
+        if clean_key.startswith("Bearer "):
+            clean_key = clean_key[7:].strip()
 
-        # 1. Try Google Gemini API (Free tier: gemini-1.5-flash)
-        if (provider_preference in ("auto", "gemini")) and gemini_key:
+        effective_provider = (provider_preference or "auto").lower()
+        gemini_key = config.get_gemini_api_key()
+        groq_key = config.get_groq_api_key()
+        openrouter_key = config.get_openrouter_api_key()
+
+        # Key prefix detection
+        if clean_key:
+            if clean_key.startswith("gsk_"):
+                groq_key = clean_key
+                effective_provider = "groq"
+            elif clean_key.startswith("AIzaSy"):
+                gemini_key = clean_key
+                effective_provider = "gemini"
+            elif clean_key.startswith("sk-or-"):
+                openrouter_key = clean_key
+                effective_provider = "openrouter"
+            else:
+                if effective_provider == "groq":
+                    groq_key = clean_key
+                elif effective_provider == "gemini":
+                    gemini_key = clean_key
+                elif effective_provider == "openrouter":
+                    openrouter_key = clean_key
+                else:
+                    # Default: Groq keys are typically 56 chars, Gemini 39 chars
+                    if len(clean_key) >= 45:
+                        groq_key = clean_key
+                        effective_provider = "groq"
+                    else:
+                        gemini_key = clean_key
+                        effective_provider = "gemini"
+
+        # 1. Try Groq Cloud if Groq preferred or Groq key present
+        if (effective_provider in ("auto", "groq")) and groq_key:
+            groq_res = self._call_groq_api(groq_key, system_instruction, sanitized_context, user_message)
+            if groq_res.get("success"):
+                return {
+                    "reply": groq_res["reply"],
+                    "provider": f"Groq ({groq_res.get('model', 'LLaMA 3.3 70B')})",
+                    "anonymized": anonymize
+                }
+            elif clean_key and effective_provider == "groq":
+                # User provided custom Groq key that encountered an error - return diagnostic info
+                err_msg = groq_res.get("error", "Failed to connect to Groq Cloud API")
+                quant_fallback = self._generate_quantitative_reasoning_reply(user_message, context, anonymize)
+                return {
+                    "reply": (
+                        f"### ⚠️ Groq Cloud Notice\n\n"
+                        f"Groq API returned an error: `{err_msg}`\n\n"
+                        f"Please verify your key from [Groq Console](https://console.groq.com/keys) (starts with `gsk_`).\n\n"
+                        f"---\n\n"
+                        f"{quant_fallback}"
+                    ),
+                    "provider": "Groq Error Diagnostic + Quant Fallback",
+                    "anonymized": anonymize
+                }
+
+        # 2. Try Google Gemini API (Free tier: gemini-1.5-flash)
+        if (effective_provider in ("auto", "gemini")) and gemini_key:
             reply = self._call_gemini_api(gemini_key, system_instruction, sanitized_context, user_message)
             if reply:
                 return {
@@ -136,18 +195,8 @@ class AIChatService:
                     "anonymized": anonymize
                 }
 
-        # 2. Try Groq Cloud (Free tier: llama-3.3-70b-versatile)
-        if (provider_preference in ("auto", "groq")) and groq_key:
-            reply = self._call_groq_api(groq_key, system_instruction, sanitized_context, user_message)
-            if reply:
-                return {
-                    "reply": reply,
-                    "provider": "Groq LLaMA 3.3 70B",
-                    "anonymized": anonymize
-                }
-
         # 3. Try OpenRouter
-        if (provider_preference in ("auto", "openrouter")) and openrouter_key:
+        if (effective_provider in ("auto", "openrouter")) and openrouter_key:
             reply = self._call_openrouter_api(openrouter_key, system_instruction, sanitized_context, user_message)
             if reply:
                 return {
@@ -195,33 +244,60 @@ class AIChatService:
             logger.error("Gemini API call failed: %s", e)
         return None
 
-    def _call_groq_api(self, api_key: str, system_prompt: str, context_str: str, message: str) -> Optional[str]:
-        try:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": f"{system_prompt}\n\nContext:\n{context_str}"},
-                    {"role": "user", "content": message}
-                ],
-                "temperature": 0.35,
-                "max_tokens": 800
-            }
-            resp = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
-            if resp.status_code == 200:
-                data = resp.json()
-                choices = data.get("choices", [])
-                if choices and "message" in choices[0]:
-                    return choices[0]["message"].get("content")
-            else:
-                logger.warning("Groq API error HTTP %d: %s", resp.status_code, resp.text[:200])
-        except Exception as e:
-            logger.error("Groq API call failed: %s", e)
-        return None
+    def _call_groq_api(self, api_key: str, system_prompt: str, context_str: str, message: str) -> Dict[str, Any]:
+        """
+        Calls Groq Cloud API with model fallback: llama-3.3-70b-versatile -> llama-3.1-8b-instant.
+        """
+        clean_key = api_key.strip().strip("\"'")
+        if clean_key.startswith("Bearer "):
+            clean_key = clean_key[7:].strip()
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {clean_key}",
+            "Content-Type": "application/json"
+        }
+
+        models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        last_error = ""
+
+        for model_name in models_to_try:
+            try:
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": f"{system_prompt}\n\nContext:\n{context_str}"},
+                        {"role": "user", "content": message}
+                    ],
+                    "temperature": 0.35,
+                    "max_tokens": 800
+                }
+                resp = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices and "message" in choices[0]:
+                        return {
+                            "success": True,
+                            "reply": choices[0]["message"].get("content"),
+                            "model": model_name
+                        }
+                else:
+                    err_json = {}
+                    try:
+                        err_json = resp.json()
+                    except Exception:
+                        pass
+                    msg = err_json.get("error", {}).get("message") or resp.text[:200]
+                    last_error = f"HTTP {resp.status_code}: {msg}"
+                    logger.warning("Groq API error on %s (%s)", model_name, last_error)
+                    if resp.status_code == 401:
+                        break
+            except Exception as e:
+                last_error = str(e)
+                logger.error("Groq API request failed on %s: %s", model_name, e)
+
+        return {"success": False, "reply": None, "error": last_error}
 
     def _call_openrouter_api(self, api_key: str, system_prompt: str, context_str: str, message: str) -> Optional[str]:
         try:
@@ -375,3 +451,4 @@ class AIChatService:
             )
 
 ai_chat_service = AIChatService()
+

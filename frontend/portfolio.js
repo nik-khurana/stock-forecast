@@ -1467,10 +1467,12 @@ function renderHoldingsTable() {
         livePriceStr = `$${match.current_price.toFixed(2)}`;
         currValStr = `$${match.current_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         const sign = match.pnl >= 0 ? "+" : "";
-        pnlStr = `${sign}$${match.pnl.toFixed(2)} (${sign}${match.pnl_pct.toFixed(2)}%)`;
-        pnlColor = match.pnl > 0 ? "text-emerald-500" : (match.pnl < 0 ? "text-rose-500" : "text-slate-400");
+        pnlStr = match.is_unlisted ? "$0.00 (0.00%)" : `${sign}$${match.pnl.toFixed(2)} (${sign}${match.pnl_pct.toFixed(2)}%)`;
+        pnlColor = match.is_unlisted ? "text-slate-400" : (match.pnl > 0 ? "text-emerald-500" : (match.pnl < 0 ? "text-rose-500" : "text-slate-400"));
         weightStr = `${match.weight_pct}%`;
-        if (match.quote_timestamp_formatted || match.quote_timestamp) {
+        if (match.is_unlisted) {
+          tsSubtext = `<div class="text-[9px] text-indigo-400 font-mono font-medium tracking-tight">Pre-IPO / Unlisted</div>`;
+        } else if (match.quote_timestamp_formatted || match.quote_timestamp) {
           const displayTs = match.quote_timestamp_formatted || match.quote_timestamp;
           tsSubtext = `<div class="text-[9px] text-slate-400 font-mono font-normal tracking-tight">${escapeHtml(displayTs)}</div>`;
         }

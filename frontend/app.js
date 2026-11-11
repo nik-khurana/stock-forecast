@@ -1014,6 +1014,9 @@ async function fetchForecast(ticker, isBackgroundUpdate = false) {
     console.error("Forecast fetch error:", err);
     if (!isBackgroundUpdate) {
       showToast(err.message || `Could not fetch forecast for ${ticker}`, "error");
+      if (!currentData && content) {
+        content.classList.add("hidden");
+      }
     }
   } finally {
     if (isBackgroundUpdate) {
