@@ -59,8 +59,28 @@
         </div>
       </div>
 
-      <!-- Right Header Actions: Market Status + Alpaca Status + Portfolio Page Link + Theme Toggle -->
+      <!-- Right Header Actions: Market Status + Countdown + Alpaca Status + Portfolio Link + Cmd+K + Theme -->
       <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        <!-- Command Palette Trigger Button (⌘K) -->
+        <button
+          id="cmd-palette-trigger"
+          class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:border-indigo-500/40 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition backdrop-blur-md"
+          title="Quick Search & Commands (⌘K or /)"
+        >
+          <i data-lucide="command" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span class="text-[11px] hidden lg:inline font-medium">Quick Jump</span>
+          <kbd class="text-[10px] px-1.5 py-0.5 rounded bg-black/[0.06] dark:bg-white/[0.08] font-mono font-semibold text-slate-400">⌘K</kbd>
+        </button>
+
+        <!-- Live US Market Session Countdown & Progress Ring -->
+        <div id="market-countdown-pill" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 36 36">
+            <path class="text-black/[0.08] dark:text-white/[0.1]" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path id="market-progress-ring" class="market-progress-ring-circle text-indigo-500" stroke-dasharray="100, 100" stroke-dashoffset="25" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          </svg>
+          <span id="market-countdown-text" class="text-[11px] font-mono font-medium text-slate-600 dark:text-slate-300">Market Open</span>
+        </div>
+
         <!-- Live US Market Status Pill -->
         <div id="market-status-pill" class="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
           <span id="market-dot" class="w-2 h-2 rounded-full bg-amber-500 market-pulse-amber"></span>
@@ -578,16 +598,39 @@
             </div>
           </div>
 
-          <!-- Sentiment Metric Gauges -->
-          <div class="flex items-center space-x-4 bg-black/[0.03] dark:bg-white/[0.04] px-4 py-2 rounded-2xl border border-black/[0.06] dark:border-white/[0.08]">
+          <!-- Sentiment Metric Gauges: Interactive Speedometer / Tachometer -->
+          <div class="flex items-center space-x-3 sm:space-x-4 bg-black/[0.03] dark:bg-white/[0.04] px-4 py-2.5 rounded-2xl border border-black/[0.06] dark:border-white/[0.08]">
+            <!-- Tachometer SVG Semi-Circle -->
+            <div class="relative w-24 sm:w-28 h-14 sm:h-16 flex items-center justify-center">
+              <svg viewBox="0 0 120 65" class="w-full h-full overflow-visible">
+                <defs>
+                  <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#f43f5e" />
+                    <stop offset="45%" stop-color="#f59e0b" />
+                    <stop offset="65%" stop-color="#eab308" />
+                    <stop offset="100%" stop-color="#10b981" />
+                  </linearGradient>
+                </defs>
+                <!-- Background Arc -->
+                <path d="M 12 55 A 48 48 0 0 1 108 55" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" class="text-black/[0.08] dark:text-white/[0.1]" />
+                <!-- Colored Gradient Arc -->
+                <path d="M 12 55 A 48 48 0 0 1 108 55" fill="none" stroke="url(#gaugeGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="150" stroke-dashoffset="0" />
+                <!-- Center Pivot Pin -->
+                <circle cx="60" cy="55" r="4" class="fill-indigo-500 shadow-md" />
+                <!-- Dynamic Needle: Points straight up at 0 deg (neutral); sweeps -75deg (bearish) to +75deg (bullish) -->
+                <line id="sentiment-gauge-needle" x1="60" y1="55" x2="60" y2="15" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="sentiment-gauge-needle text-slate-800 dark:text-white" style="transform-origin: 60px 55px; transform: rotate(0deg);" />
+              </svg>
+            </div>
+
+            <!-- Value & Confidence -->
             <div class="text-right">
-              <span class="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Sentiment Score</span>
-              <span id="sentiment-score-val" class="text-lg font-extrabold text-emerald-500">+28.5</span>
+              <span class="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Score</span>
+              <span id="sentiment-score-val" class="text-base sm:text-lg font-extrabold text-emerald-500">+28.5</span>
             </div>
             <div class="h-7 w-px bg-black/[0.08] dark:bg-white/[0.1]"></div>
             <div>
-              <span class="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">NLP Confidence</span>
-              <span id="sentiment-confidence-val" class="text-sm font-bold text-slate-700 dark:text-slate-300">85%</span>
+              <span class="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Confidence</span>
+              <span id="sentiment-confidence-val" class="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">85%</span>
             </div>
           </div>
         </div>
@@ -756,6 +799,37 @@
     <p>StockCast ML &copy; Personal Stock Price Forecasting Application</p>
     <p class="mt-1">Powered by Alpaca Market Data API v2 & Scikit-Learn Quantile Engine</p>
   </footer>
+
+  <!-- Quick Command Palette (Spotlight Search: ⌘K / Ctrl+K) -->
+  <div id="command-palette-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-md hidden items-start justify-center pt-20 px-4">
+    <div id="command-palette-modal" class="w-full max-w-xl rounded-2xl apple-glass shadow-2xl border border-black/10 dark:border-white/10 overflow-hidden transform transition-all">
+      <!-- Input Row -->
+      <div class="flex items-center px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <i data-lucide="search" class="w-5 h-5 text-indigo-500 mr-3 shrink-0"></i>
+        <input
+          type="text"
+          id="cmd-palette-input"
+          placeholder="Search tickers, switch pages, or execute commands... (ESC to exit)"
+          class="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <kbd class="text-[10px] px-2 py-0.5 rounded bg-black/[0.06] dark:border-white/[0.08] font-mono text-slate-400">ESC</kbd>
+      </div>
+      <!-- Suggestions / Results List -->
+      <div id="cmd-palette-results" class="max-h-80 overflow-y-auto divide-y divide-black/[0.04] dark:divide-white/[0.04] p-2 space-y-1">
+        <!-- Dynamically populated commands / tickers -->
+      </div>
+      <!-- Footer Hints -->
+      <div class="px-4 py-2.5 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[11px] text-slate-400">
+        <div class="flex items-center space-x-3">
+          <span><kbd class="font-mono text-[10px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 rounded">↑</kbd> <kbd class="font-mono text-[10px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 rounded">↓</kbd> Navigate</span>
+          <span><kbd class="font-mono text-[10px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 rounded">↵</kbd> Select</span>
+        </div>
+        <span class="font-mono">StockCast Spotlight</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Apple-Style Floating Toast Notification Container -->
   <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>

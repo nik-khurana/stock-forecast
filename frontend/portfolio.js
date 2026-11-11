@@ -32,6 +32,8 @@ let currentAdjustAction = "buy"; // "buy" or "sell"
 // Synchronized 10-Minute Market Streaming State (:00, :10, :20, :30, :40, :50)
 let portfolioLiveTimer = null;
 let isPortfolioLiveUpdating = false;
+let portfolioRiskReturnChart = null;
+let milestoneTarget = 50000;
 
 /**
  * Calculates milliseconds remaining until the next wall-clock 10-minute mark
@@ -63,6 +65,162 @@ function getFormattedETTime(dateObj = new Date()) {
   }
 }
 
+/**
+ * Smooth Apple/Robinhood-Style Rolling Number Count-Up Animation
+ */
+function animateValue(elem, start, end, duration = 800, formatter = (v) => v.toFixed(2)) {
+  if (!elem) return;
+  if (isNaN(start) || isNaN(end) || Math.abs(start - end) < 0.0001) {
+    elem.textContent = formatter(end);
+    return;
+  }
+  const startTime = performance.now();
+  const diff = end - start;
+
+  function step(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const current = start + diff * ease;
+    elem.textContent = formatter(current);
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      elem.textContent = formatter(end);
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
+/**
+ * Live Price Flash Pulse Glow Animation (Emerald for up, Rose for down)
+ */
+function flashElement(elem, direction = "up") {
+  if (!elem) return;
+  const cls = direction === "up" ? "flash-emerald" : "flash-rose";
+  elem.classList.remove("flash-emerald", "flash-rose");
+  void elem.offsetWidth;
+  elem.classList.add(cls);
+  setTimeout(() => {
+    elem.classList.remove(cls);
+  }, 1200);
+}
+
+/**
+ * Generates lightweight, high-performance inline mini SVG sparklines for the holdings table.
+ */
+function generateSparklineSVG(trendPoints, isPositive, isUnlisted) {
+  if (isUnlisted) {
+    return `
+      <svg class="sparkline-svg w-12 h-4 text-slate-400 shrink-0" viewBox="0 0 48 18">
+        <line x1="2" y1="9" x2="46" y2="9" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3,2" />
+      </svg>
+    `;
+  }
+
+  const pts = Array.isArray(trendPoints) && trendPoints.length >= 2
+    ? trendPoints
+    : (isPositive ? [12, 11, 13, 10, 8, 4] : [4, 6, 8, 7, 11, 14]);
+
+  const minVal = Math.min(...pts);
+  const maxVal = Math.max(...pts);
+  const range = (maxVal - minVal) || 1;
+
+  const coords = pts.map((val, idx) => {
+    const x = 2 + (idx / (pts.length - 1)) * 44;
+    const y = 16 - ((val - minVal) / range) * 12;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  const polylineD = coords.join(" ");
+  const strokeColor = isPositive ? "#10b981" : "#f43f5e";
+  const fillColor = isPositive ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)";
+  const areaPoints = `2,17 ${polylineD} 46,17`;
+
+  return `
+    <svg class="sparkline-svg w-12 h-4 shrink-0" viewBox="0 0 48 18">
+      <polygon points="${areaPoints}" fill="${fillColor}" />
+      <polyline points="${polylineD}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  `;
+}
+
+/**
+ * Live US Market Trading Clock & Circular Session Progress Ring
+ * Regular NYSE Hours: 9:30 AM - 4:00 PM US Eastern Time (Monday-Friday)
+ */
+function updateMarketClock() {
+  const textElem = document.getElementById("market-countdown-text");
+  const ringElem = document.getElementById("market-progress-ring");
+  if (!textElem && !ringElem) return;
+
+  try {
+    const now = new Date();
+    const etFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour12: false,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      weekday: "short"
+    });
+    const parts = etFormatter.formatToParts(now);
+    const getPart = (type) => parts.find((p) => p.type === type)?.value;
+    const weekday = getPart("weekday");
+    const h = parseInt(getPart("hour"), 10);
+    const m = parseInt(getPart("minute"), 10);
+
+    const isWeekend = weekday === "Sat" || weekday === "Sun";
+    const minutesSinceMidnight = h * 60 + m;
+    const openMinutes = 9 * 60 + 30; // 9:30 AM
+    const closeMinutes = 16 * 60;    // 4:00 PM
+    const totalSessionMinutes = closeMinutes - openMinutes; // 390 mins
+
+    let progressPct = 0;
+    let label = "Market Open";
+
+    if (isWeekend) {
+      label = "Weekend (Closed)";
+      progressPct = 0;
+    } else if (minutesSinceMidnight < openMinutes) {
+      const minsToOpen = openMinutes - minutesSinceMidnight;
+      const hoursToOpen = Math.floor(minsToOpen / 60);
+      const remMins = minsToOpen % 60;
+      label = hoursToOpen > 0 ? `Opens in ${hoursToOpen}h ${remMins}m` : `Opens in ${remMins}m`;
+      progressPct = 0;
+    } else if (minutesSinceMidnight >= closeMinutes) {
+      const formattedClose = `${h % 12 || 12}:${m < 10 ? "0" + m : m} ${h >= 12 ? "PM" : "AM"} ET`;
+      label = `Market Closed (${formattedClose})`;
+      progressPct = 100;
+    } else {
+      const minsElapsed = minutesSinceMidnight - openMinutes;
+      const minsRemaining = closeMinutes - minutesSinceMidnight;
+      const hoursRem = Math.floor(minsRemaining / 60);
+      const remMins = minsRemaining % 60;
+      progressPct = Math.min(100, Math.max(0, (minsElapsed / totalSessionMinutes) * 100));
+      label = hoursRem > 0 ? `Closes in ${hoursRem}h ${remMins}m` : `Closes in ${remMins}m`;
+    }
+
+    if (textElem) textElem.textContent = label;
+    if (ringElem) {
+      const offset = 100 - (progressPct * 100 / 100);
+      ringElem.style.strokeDashoffset = offset;
+      if (minutesSinceMidnight >= openMinutes && minutesSinceMidnight < closeMinutes && !isWeekend) {
+        ringElem.setAttribute("class", "market-progress-ring-circle text-emerald-500");
+      } else {
+        ringElem.setAttribute("class", "market-progress-ring-circle text-indigo-500");
+      }
+    }
+  } catch (err) {
+    console.warn("Market clock update error:", err);
+  }
+}
+
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
@@ -77,6 +235,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initPortfolioVisibilityListener();
   checkPortfolioMarketStatus();
   setInterval(checkPortfolioMarketStatus, 30000); // Check US market trading session status every 30s
+  updateMarketClock();
+  setInterval(updateMarketClock, 30000); // Update market clock progress ring every 30s
+  initCommandPalette();
 
   // If vault is locked, show unlock modal on initial visit
   if (isVaultLocked) {
@@ -1307,6 +1468,7 @@ function renderHoldingsTable() {
     let pnlColor = "text-slate-400";
     let weightStr = "...";
     let tsSubtext = "";
+    let sparklineHtml = generateSparklineSVG(null, true, false);
 
     if (portfolioForecastData && portfolioForecastData.holdings_breakdown) {
       const match = portfolioForecastData.holdings_breakdown.find((item) => item.ticker === h.ticker);
@@ -1321,6 +1483,7 @@ function renderHoldingsTable() {
           const displayTs = match.quote_timestamp_formatted || match.quote_timestamp;
           tsSubtext = `<div class="text-[9px] text-slate-400 font-mono font-normal tracking-tight">${escapeHtml(displayTs)}</div>`;
         }
+        sparklineHtml = generateSparklineSVG(null, match.pnl >= 0, Boolean(match.is_unlisted));
       }
     }
 
@@ -1331,6 +1494,7 @@ function renderHoldingsTable() {
     tr.innerHTML = `
       <td class="py-3 px-5 font-bold text-slate-900 dark:text-white flex items-center space-x-2">
         <span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-500 text-xs font-mono">${safeTicker}</span>
+        ${sparklineHtml}
       </td>
       <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 font-medium">${safeShares}</td>
       <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 privacy-value">$${h.buy_price.toFixed(2)}</td>
@@ -1432,6 +1596,10 @@ function clearPortfolioForecastUI() {
   if (sectorDonutChartInstance) {
     sectorDonutChartInstance.destroy();
     sectorDonutChartInstance = null;
+  }
+  if (portfolioRiskReturnChart) {
+    portfolioRiskReturnChart.destroy();
+    portfolioRiskReturnChart = null;
   }
 
   const dailyTbody = document.getElementById("portfolio-daily-tbody");
@@ -1625,9 +1793,29 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
     return el;
   };
 
-  // Update KPI Cards
-  setTxt("portfolio-cost-basis", `$${data.total_cost_basis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-  setTxt("portfolio-current-value", `$${data.current_portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+  // Update KPI Cards with rolling count-up & flash animation
+  const costBasisElem = document.getElementById("portfolio-cost-basis");
+  if (costBasisElem) {
+    const rawPrevCost = parseFloat(costBasisElem.textContent.replace(/[^0-9.-]/g, ""));
+    const prevCost = isNaN(rawPrevCost) ? data.total_cost_basis : rawPrevCost;
+    if (Math.abs(prevCost - data.total_cost_basis) > 0.01) {
+      animateValue(costBasisElem, prevCost, data.total_cost_basis, 800, (v) => `$${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    } else {
+      costBasisElem.textContent = `$${data.total_cost_basis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    }
+  }
+
+  const currValElem = document.getElementById("portfolio-current-value");
+  if (currValElem) {
+    const rawPrevVal = parseFloat(currValElem.textContent.replace(/[^0-9.-]/g, ""));
+    const prevVal = isNaN(rawPrevVal) ? data.current_portfolio_value : rawPrevVal;
+    if (Math.abs(prevVal - data.current_portfolio_value) > 0.01) {
+      animateValue(currValElem, prevVal, data.current_portfolio_value, 800, (v) => `$${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+      flashElement(currValElem, data.current_portfolio_value >= prevVal ? "up" : "down");
+    } else {
+      currValElem.textContent = `$${data.current_portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    }
+  }
 
   const portTsElem = document.getElementById("portfolio-price-timestamp");
   if (portTsElem) {
@@ -1724,6 +1912,14 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
   if (data.stress_test) {
     renderMacroStressTest(data.stress_test, data.current_portfolio_value);
   }
+
+  // Asset Risk vs. Return Bubble Matrix (2D Scatter Plot)
+  if (data.holdings_breakdown) {
+    renderRiskReturnMatrix(data.holdings_breakdown);
+  }
+
+  // Financial Goal Milestone & Time-to-Target Calculator
+  updateGoalMilestoneCalculator(data);
 
   applyPrivacyMask();
 }
@@ -1896,9 +2092,30 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
           borderWidth: 1,
           padding: 12,
           callbacks: {
+            title: function (items) {
+              if (!items || !items.length) return "";
+              const idx = items[0].dataIndex;
+              const pt = dailyPoints[idx];
+              return `Day +${idx + 1} • ${pt ? pt.date : ""}`;
+            },
             label: function (context) {
               return `${context.dataset.label}: $${context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             },
+            afterBody: function (items) {
+              if (!items || !items.length || !dailyPoints) return [];
+              const idx = items[0].dataIndex;
+              const pt = dailyPoints[idx];
+              if (!pt || !currentVal) return [];
+              const roi = ((pt.mean - currentVal) / currentVal) * 100;
+              const roiSign = roi >= 0 ? "+" : "";
+              const profit = pt.mean - currentVal;
+              const profitSign = profit >= 0 ? "+" : "-";
+              const spread = pt.max - pt.min;
+              return [
+                `Expected ROI: ${roiSign}${roi.toFixed(2)}% (${profitSign}$${Math.abs(profit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
+                `Range: $${Math.round(pt.min).toLocaleString()} — $${Math.round(pt.max).toLocaleString()} (Spread: $${Math.round(spread).toLocaleString()})`
+              ];
+            }
           },
         },
       },
@@ -2063,9 +2280,30 @@ function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
           borderWidth: 1,
           padding: 12,
           callbacks: {
+            title: function (items) {
+              if (!items || !items.length) return "";
+              const idx = items[0].dataIndex;
+              const pt = monthlyPoints[idx];
+              return `Month +${idx + 1} • ${pt ? pt.year_month : ""}`;
+            },
             label: function (context) {
               return `${context.dataset.label}: $${context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             },
+            afterBody: function (items) {
+              if (!items || !items.length || !monthlyPoints) return [];
+              const idx = items[0].dataIndex;
+              const pt = monthlyPoints[idx];
+              if (!pt || !portfolioForecastData) return [];
+              const curVal = portfolioForecastData.current_portfolio_value || 1;
+              const roi = ((pt.mean - curVal) / curVal) * 100;
+              const roiSign = roi >= 0 ? "+" : "";
+              const profit = pt.mean - curVal;
+              const profitSign = profit >= 0 ? "+" : "-";
+              return [
+                `Projected Growth: ${roiSign}${roi.toFixed(2)}% (${profitSign}$${Math.abs(profit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
+                `Spread: $${Math.round(pt.max - pt.min).toLocaleString()} (Min: $${Math.round(pt.min).toLocaleString()} — Max: $${Math.round(pt.max).toLocaleString()})`
+              ];
+            }
           },
         },
       },
@@ -2516,5 +2754,503 @@ function updatePriceColumnHeader(isOpen, session = "regular") {
     th.innerHTML = `<span>Live Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Regular Session Live Price (9:30 AM – 4:00 PM ET)"></span>`;
     th.title = "Live streaming market price during NYSE / NASDAQ regular trading";
   }
+}
+
+/**
+ * Renders the Asset Risk vs. Expected Return Bubble Matrix (2D Scatter Plot)
+ */
+function renderRiskReturnMatrix(holdingsBreakdown) {
+  const canvas = document.getElementById("portfolioRiskReturnChart");
+  if (!canvas || !Array.isArray(holdingsBreakdown) || holdingsBreakdown.length === 0) return;
+
+  const dark = isDarkMode();
+  const ctx = canvas.getContext("2d");
+
+  const bubbleData = holdingsBreakdown.map((h) => {
+    let riskPct = 12.0;
+    if (h.is_unlisted) {
+      riskPct = 2.0;
+    } else if (h.support_floor && h.current_price > 0) {
+      const cushion = (Math.abs(h.current_price - h.support_floor) / h.current_price) * 100;
+      riskPct = Math.max(3, Math.min(35, cushion * 1.5));
+    }
+    const returnPct = h.forecast_60d_return_pct || 0.0;
+    const weight = h.weight_pct || 10;
+    const radius = Math.max(8, Math.min(26, Math.sqrt(weight) * 5.2));
+
+    let bg = "rgba(99, 102, 241, 0.7)";
+    let border = "#6366f1";
+    let quadrant = "Growth Anchor";
+
+    if (returnPct >= 0 && riskPct <= 16) {
+      bg = dark ? "rgba(16, 185, 129, 0.65)" : "rgba(16, 185, 129, 0.75)";
+      border = "#10b981";
+      quadrant = "Growth Anchor";
+    } else if (returnPct < 0 && riskPct <= 16) {
+      bg = dark ? "rgba(6, 182, 212, 0.65)" : "rgba(6, 182, 212, 0.75)";
+      border = "#06b6d4";
+      quadrant = "Defensive Rock";
+    } else if (returnPct >= 0 && riskPct > 16) {
+      bg = dark ? "rgba(245, 158, 11, 0.65)" : "rgba(245, 158, 11, 0.75)";
+      border = "#f59e0b";
+      quadrant = "High-Beta Growth";
+    } else {
+      bg = dark ? "rgba(244, 63, 94, 0.65)" : "rgba(244, 63, 94, 0.75)";
+      border = "#f43f5e";
+      quadrant = "Laggard / Risk";
+    }
+
+    return {
+      x: Number(riskPct.toFixed(1)),
+      y: Number(returnPct.toFixed(1)),
+      r: Number(radius.toFixed(1)),
+      ticker: h.ticker,
+      name: h.company_name,
+      weight: h.weight_pct,
+      val: h.current_value,
+      quadrant: quadrant,
+      bgColor: bg,
+      borderColor: border
+    };
+  });
+
+  if (portfolioRiskReturnChart) {
+    portfolioRiskReturnChart.destroy();
+  }
+
+  const gridColor = dark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.06)";
+  const tickColor = dark ? "#64748b" : "#94a3b8";
+
+  const quadrantLinesPlugin = {
+    id: "quadrantLines",
+    beforeDraw: (chart) => {
+      const { ctx: c, chartArea: { top, bottom, left, right }, scales: { x, y } } = chart;
+      const zeroY = y.getPixelForValue(0);
+      const medianX = x.getPixelForValue(16);
+
+      c.save();
+      c.setLineDash([4, 4]);
+      c.lineWidth = 1;
+      c.strokeStyle = dark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)";
+
+      if (zeroY >= top && zeroY <= bottom) {
+        c.beginPath();
+        c.moveTo(left, zeroY);
+        c.lineTo(right, zeroY);
+        c.stroke();
+      }
+
+      if (medianX >= left && medianX <= right) {
+        c.beginPath();
+        c.moveTo(medianX, top);
+        c.lineTo(medianX, bottom);
+        c.stroke();
+      }
+      c.restore();
+    }
+  };
+
+  portfolioRiskReturnChart = new Chart(ctx, {
+    type: "bubble",
+    plugins: [quadrantLinesPlugin],
+    data: {
+      datasets: [{
+        label: "Holdings",
+        data: bubbleData,
+        backgroundColor: bubbleData.map((b) => b.bgColor),
+        borderColor: bubbleData.map((b) => b.borderColor),
+        borderWidth: 2,
+        hoverBorderWidth: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: dark ? "rgba(0, 0, 0, 0.95)" : "#ffffff",
+          titleColor: dark ? "#ffffff" : "#0f172a",
+          bodyColor: dark ? "#cbd5e1" : "#334155",
+          borderColor: dark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.08)",
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            title: function (items) {
+              if (!items || !items.length) return "";
+              const pt = items[0].raw;
+              return `${pt.ticker} • ${pt.name}`;
+            },
+            label: function (context) {
+              const pt = context.raw;
+              const sign = pt.y >= 0 ? "+" : "";
+              return [
+                `Quadrant: ${pt.quadrant}`,
+                `Projected 60D Return: ${sign}${pt.y}%`,
+                `Risk Volatility Spread: ${pt.x}%`,
+                `Portfolio Weight: ${pt.weight}% ($${pt.val.toLocaleString()})`
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: "Risk / Volatility Spread (%)",
+            color: tickColor,
+            font: { size: 11, weight: "bold" }
+          },
+          grid: { color: gridColor },
+          ticks: { color: tickColor, callback: (v) => `${v}%` }
+        },
+        y: {
+          title: {
+            display: true,
+            text: "Expected 60-Day Return (%)",
+            color: tickColor,
+            font: { size: 11, weight: "bold" }
+          },
+          grid: { color: gridColor },
+          ticks: { color: tickColor, callback: (v) => `${v}%` }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Financial Goal Milestone & Time-to-Target Calculator
+ */
+function updateGoalMilestoneCalculator(data) {
+  if (!data) return;
+
+  const currentVal = data.current_portfolio_value || data.total_cost_basis || 0;
+  const cagr = (data.portfolio_3y_summary && typeof data.portfolio_3y_summary.cagr_3y_pct === "number")
+    ? data.portfolio_3y_summary.cagr_3y_pct
+    : 0;
+
+  const targetInput = document.getElementById("milestone-target-input");
+  const slider = document.getElementById("milestone-slider");
+  const cagrBadge = document.getElementById("milestone-cagr-badge");
+  const dateElem = document.getElementById("milestone-projected-date");
+  const timeElem = document.getElementById("milestone-time-remaining");
+  const statusBadge = document.getElementById("milestone-status-badge");
+  const progressPctElem = document.getElementById("milestone-progress-pct");
+  const progressBar = document.getElementById("milestone-progress-bar");
+  const currValElem = document.getElementById("milestone-curr-val");
+  const targetValElem = document.getElementById("milestone-target-val");
+
+  if (cagrBadge) {
+    const sign = cagr >= 0 ? "+" : "";
+    cagrBadge.textContent = `Projected CAGR: ${sign}${cagr.toFixed(2)}%`;
+    cagrBadge.className = cagr >= 0
+      ? "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+      : "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+  }
+
+  if (currValElem) {
+    currValElem.textContent = `$${currentVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  }
+
+  function recalculateMilestone(target) {
+    milestoneTarget = target;
+    if (targetValElem) {
+      targetValElem.textContent = `$${target.toLocaleString()}`;
+    }
+
+    if (currentVal <= 0) {
+      if (dateElem) dateElem.textContent = "Positions Required";
+      if (timeElem) timeElem.textContent = "Add stock holdings above to calculate time-to-target";
+      if (progressBar) progressBar.style.width = "0%";
+      if (progressPctElem) progressPctElem.textContent = "0.0%";
+      return;
+    }
+
+    const pct = Math.min(100, Math.max(0, (currentVal / target) * 100));
+    if (progressPctElem) progressPctElem.textContent = `${pct.toFixed(1)}%`;
+    if (progressBar) progressBar.style.width = `${pct}%`;
+
+    if (currentVal >= target) {
+      if (statusBadge) {
+        statusBadge.textContent = "Achieved 🎉";
+        statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
+      }
+      if (dateElem) dateElem.textContent = "Goal Reached!";
+      if (timeElem) timeElem.textContent = "Target already achieved with your current portfolio equity";
+      return;
+    }
+
+    if (cagr <= 0) {
+      if (statusBadge) {
+        statusBadge.textContent = "Flat / Bearish";
+        statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30";
+      }
+      if (dateElem) dateElem.textContent = "Trajectory Flat";
+      if (timeElem) timeElem.textContent = "Requires positive compound CAGR to calculate hit date";
+      return;
+    }
+
+    // Target = Current * (1 + CAGR/100)^Years
+    const r = cagr / 100;
+    const years = Math.log(target / currentVal) / Math.log(1 + r);
+    const totalMonths = Math.round(years * 12);
+
+    const hitDate = new Date();
+    hitDate.setMonth(hitDate.getMonth() + totalMonths);
+    const dateStr = hitDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    if (statusBadge) {
+      statusBadge.textContent = totalMonths <= 36 ? "On Track 🚀" : "Long-Term Goal";
+      statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-500 border border-indigo-500/30";
+    }
+
+    if (dateElem) dateElem.textContent = dateStr;
+    if (timeElem) {
+      if (years >= 1) {
+        timeElem.textContent = `Estimated in ~${years.toFixed(1)} years (${totalMonths} months) at ${cagr.toFixed(1)}% CAGR`;
+      } else {
+        timeElem.textContent = `Estimated in ~${totalMonths} months at ${cagr.toFixed(1)}% CAGR`;
+      }
+    }
+  }
+
+  if (targetInput && !targetInput.dataset.listenerAttached) {
+    targetInput.dataset.listenerAttached = "true";
+    targetInput.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value) || 1000;
+      if (slider) slider.value = Math.min(250000, val);
+      recalculateMilestone(val);
+    });
+  }
+
+  if (slider && !slider.dataset.listenerAttached) {
+    slider.dataset.listenerAttached = "true";
+    slider.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value) || 1000;
+      if (targetInput) targetInput.value = val;
+      recalculateMilestone(val);
+    });
+  }
+
+  document.querySelectorAll(".milestone-preset-btn").forEach((btn) => {
+    if (!btn.dataset.listenerAttached) {
+      btn.dataset.listenerAttached = "true";
+      btn.addEventListener("click", () => {
+        const val = parseFloat(btn.getAttribute("data-target")) || 50000;
+        if (targetInput) targetInput.value = val;
+        if (slider) slider.value = Math.min(250000, val);
+        recalculateMilestone(val);
+      });
+    }
+  });
+
+  const initialTarget = targetInput ? (parseFloat(targetInput.value) || 50000) : 50000;
+  recalculateMilestone(initialTarget);
+}
+
+/**
+ * Quick Command Palette (Spotlight Search: ⌘K / Ctrl+K / /)
+ */
+function initCommandPalette() {
+  const trigger = document.getElementById("cmd-palette-trigger");
+  const backdrop = document.getElementById("command-palette-backdrop");
+  const input = document.getElementById("cmd-palette-input");
+  const results = document.getElementById("cmd-palette-results");
+  if (!backdrop || !input || !results) return;
+
+  let selectedIdx = 0;
+  let currentItems = [];
+
+  const defaultCommands = [
+    { type: "nav", label: "Single Stock Forecasting", sub: "Analyze individual ticker quantile models and sentiment", icon: "line-chart", action: () => window.location.href = "/" },
+    { type: "action", label: "Toggle Privacy Mask (Hide Balances)", sub: "Stealth blur mode for portfolio values", icon: "eye", action: () => { const t = document.getElementById("vault-privacy-toggle"); if (t) t.click(); } },
+    { type: "action", label: "Recalculate Portfolio Projections", sub: "Rerun 60-day and 3-year aggregate models", icon: "refresh-cw", action: () => { const b = document.getElementById("portfolio-recalc-btn"); if (b) b.click(); } },
+    { type: "action", label: "Export 60-Day Projections (CSV)", sub: "Download aggregate daily predictions CSV", icon: "download", action: () => { const b = document.getElementById("export-portfolio-60d-csv"); if (b) b.click(); } },
+    { type: "action", label: "Export Investment Memorandum (PDF)", sub: "Download institutional portfolio PDF report", icon: "file-text", action: () => { const b = document.getElementById("portfolio-export-pdf-btn"); if (b) b.click(); } },
+    { type: "action", label: "Toggle Dark / Light Theme", sub: "Switch visual glass display mode", icon: "sun-moon", action: () => { const t = document.getElementById("theme-toggle"); if (t) t.click(); } },
+    { type: "action", label: "Sort Positions A to Z", sub: "Alphabetically organize active holdings", icon: "arrow-up-down", action: () => { const b = document.getElementById("sort-holdings-az-btn"); if (b) b.click(); } },
+    { type: "ticker", ticker: "NVDA", label: "NVIDIA Corporation", sub: "Semiconductors & AI Accelerated Hardware", icon: "trending-up" },
+    { type: "ticker", ticker: "AAPL", label: "Apple Inc.", sub: "Consumer Technology, Services & Ecosystem", icon: "trending-up" },
+    { type: "ticker", ticker: "MSFT", label: "Microsoft Corporation", sub: "Cloud Azure, Enterprise Software & AI", icon: "trending-up" },
+    { type: "ticker", ticker: "TSLA", label: "Tesla, Inc.", sub: "Electric Autonomous Vehicles & Robotics", icon: "trending-up" },
+    { type: "ticker", ticker: "ANT", label: "Anthropic (Pre-IPO / Nov 19)", sub: "AI Research & Claude Language Models", icon: "sparkles" }
+  ];
+
+  function openPalette() {
+    backdrop.classList.remove("hidden");
+    backdrop.classList.add("flex");
+    input.value = "";
+    selectedIdx = 0;
+    renderResults(defaultCommands);
+    setTimeout(() => input.focus(), 60);
+  }
+
+  function closePalette() {
+    backdrop.classList.add("hidden");
+    backdrop.classList.remove("flex");
+  }
+
+  function renderResults(items) {
+    currentItems = items;
+    results.innerHTML = "";
+    if (!items || items.length === 0) {
+      results.innerHTML = `<div class="p-4 text-xs text-center text-slate-400">No matching commands or tickers found.</div>`;
+      return;
+    }
+
+    items.forEach((item, idx) => {
+      const row = document.createElement("div");
+      const isSel = idx === selectedIdx;
+      row.className = `cmd-palette-item px-3.5 py-2.5 rounded-xl cursor-pointer flex items-center justify-between transition ${isSel ? "selected bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20" : "text-slate-700 dark:text-slate-200"}`;
+
+      const badge = item.ticker ? `<span class="px-2 py-0.5 rounded font-mono font-bold text-xs bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">${escapeHtml(item.ticker)}</span>` : `<i data-lucide="${item.icon || 'arrow-right'}" class="w-4 h-4 text-slate-400"></i>`;
+
+      row.innerHTML = `
+        <div class="flex items-center space-x-3 min-w-0 pr-2">
+          <div class="w-7 h-7 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] flex items-center justify-center shrink-0">
+            <i data-lucide="${item.icon || 'search'}" class="w-3.5 h-3.5 text-indigo-500"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-semibold truncate">${escapeHtml(item.label)}</div>
+            ${item.sub ? `<div class="text-[10px] text-slate-400 truncate">${escapeHtml(item.sub)}</div>` : ""}
+          </div>
+        </div>
+        <div class="shrink-0">${badge}</div>
+      `;
+
+      row.addEventListener("mouseenter", () => {
+        selectedIdx = idx;
+        updateSelectionHighlight();
+      });
+
+      row.addEventListener("click", () => {
+        executeItem(item);
+      });
+
+      results.appendChild(row);
+    });
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function updateSelectionHighlight() {
+    const children = results.querySelectorAll(".cmd-palette-item");
+    children.forEach((c, i) => {
+      if (i === selectedIdx) {
+        c.classList.add("selected", "bg-indigo-500/10", "dark:bg-indigo-500/20");
+        c.scrollIntoView({ block: "nearest" });
+      } else {
+        c.classList.remove("selected", "bg-indigo-500/10", "dark:bg-indigo-500/20");
+      }
+    });
+  }
+
+  function executeItem(item) {
+    closePalette();
+    if (item.action) {
+      item.action();
+    } else if (item.ticker) {
+      window.location.href = `/?ticker=${encodeURIComponent(item.ticker)}`;
+    }
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      if (backdrop.classList.contains("hidden")) {
+        openPalette();
+      } else {
+        closePalette();
+      }
+    } else if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      openPalette();
+    } else if (e.key === "Escape" && !backdrop.classList.contains("hidden")) {
+      e.preventDefault();
+      closePalette();
+    } else if (!backdrop.classList.contains("hidden")) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (currentItems.length > 0) {
+          selectedIdx = (selectedIdx + 1) % currentItems.length;
+          updateSelectionHighlight();
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (currentItems.length > 0) {
+          selectedIdx = (selectedIdx - 1 + currentItems.length) % currentItems.length;
+          updateSelectionHighlight();
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (currentItems.length > 0 && currentItems[selectedIdx]) {
+          executeItem(currentItems[selectedIdx]);
+        }
+      }
+    }
+  });
+
+  if (trigger) {
+    trigger.addEventListener("click", openPalette);
+  }
+
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      closePalette();
+    }
+  });
+
+  let searchTimer = null;
+  input.addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    clearTimeout(searchTimer);
+    if (!q) {
+      selectedIdx = 0;
+      renderResults(defaultCommands);
+      return;
+    }
+
+    searchTimer = setTimeout(async () => {
+      const localMatches = defaultCommands.filter((c) =>
+        c.label.toLowerCase().includes(q) ||
+        (c.sub && c.sub.toLowerCase().includes(q)) ||
+        (c.ticker && c.ticker.toLowerCase().includes(q))
+      );
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const apiMatches = (data.results || []).map((r) => ({
+            type: "ticker",
+            ticker: r.ticker,
+            label: r.name,
+            sub: r.aliases || "Exchange Listed Stock",
+            icon: "trending-up"
+          }));
+
+          const seen = new Set(localMatches.map((m) => m.ticker || m.label));
+          const merged = [...localMatches];
+          apiMatches.forEach((am) => {
+            if (!seen.has(am.ticker)) {
+              seen.add(am.ticker);
+              merged.push(am);
+            }
+          });
+
+          selectedIdx = 0;
+          renderResults(merged);
+        } else {
+          selectedIdx = 0;
+          renderResults(localMatches);
+        }
+      } catch (err) {
+        selectedIdx = 0;
+        renderResults(localMatches);
+      }
+    }, 150);
+  });
 }
 

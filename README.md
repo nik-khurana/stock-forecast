@@ -71,6 +71,16 @@ An advanced quantitative forecasting and portfolio risk intelligence platform po
 * **Sequential Queue Processing**: Multi-asset portfolio calculations are processed one-by-one in an orderly queue with explicit memory deallocation (`gc.collect()`), keeping peak RAM under 200 MB.
 * **Strict 2 vCPU / 1000 MB RAM Guardrails**: Hard-caps OpenMP/MKL thread pools (`OMP_NUM_THREADS=1`) and serializes requests via `asyncio.Lock` to guarantee stability and prevent container OOM termination on Railway.
 
+### 12. 🎨 Interactive Fintech Visualizations & UX Micro-Animations
+* 🏎️ **Animated Speedometer / Tachometer Sentiment Gauge**: Visual semi-circular SVG dial with Bearish-to-Bullish gradient and smooth spring needle sweep (`cubic-bezier(0.34, 1.56, 0.64, 1)`) reflecting real-time NLP sentiment scores from -100 to +100.
+* 🔢 **Apple / Robinhood-Style Rolling Numbers & Flash Pulse Glow**: Eased cubic count-up animations for prices, valuations, and metrics with instantaneous green/rose glowing pulse rings (`.flash-emerald`, `.flash-rose`) on 10-minute price updates.
+* 🎯 **Interactive Timeline Scrubber & Enhanced Crosshair Tooltips**: Crosshair cursor hover showing day/month indices, expected ROI%, dollar gains, and volatility spread bounds.
+* 📈 **Mini SVG Trend Sparklines**: Inline SVG sparklines next to each ticker badge in the portfolio table with positive green fills, negative red trends, or dashed neutral baselines for pre-IPO / unlisted assets.
+* 🗺️ **Asset Risk vs. Expected Return Bubble Matrix (2D Scatter Plot)**: Quadrant scatter chart plotting portfolio holdings by risk/volatility spread (X-axis) against expected 60-day return (Y-axis), categorized into *Growth Anchors*, *Defensive Rocks*, *High-Beta Growth*, and *Laggards*, with bubble sizes scaled by portfolio weight.
+* 🏆 **Financial Goal Milestone & Time-to-Target Calculator**: Set target milestones ($25K, $50K, $100K, $250K, $1M) with interactive sliders, animated progress bars, and compound annual growth rate (CAGR) countdown dates predicting the exact month your goal will be reached.
+* ⌨️ **Quick Command Palette / Spotlight Search (`⌘K` / `Ctrl+K` / `/`)**: Modal search overlay for instant ticker lookups, quick page jumps, dark mode toggles, and PDF/CSV exports with arrow key navigation.
+* 🔔 **Live Market Clock & Circular NYSE Session Progress Ring**: Real-time US Eastern Time countdown clock with an animated circular SVG ring displaying the percentage of the current trading day elapsed.
+
 ---
 
 ## 🏗️ Architecture Overview

@@ -69,8 +69,28 @@
         </div>
       </div>
 
-      <!-- Right Header Actions: Market Status + Privacy Mask + Recalculate + Theme Toggle -->
+      <!-- Right Header Actions: Market Status + Countdown + Privacy Mask + Recalculate + Theme Toggle -->
       <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        <!-- Command Palette Trigger Button (⌘K) -->
+        <button
+          id="cmd-palette-trigger"
+          class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:border-indigo-500/40 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition backdrop-blur-md"
+          title="Quick Search & Commands (⌘K or /)"
+        >
+          <i data-lucide="command" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span class="text-[11px] hidden lg:inline font-medium">Quick Jump</span>
+          <kbd class="text-[10px] px-1.5 py-0.5 rounded bg-black/[0.06] dark:bg-white/[0.08] font-mono font-semibold text-slate-400">⌘K</kbd>
+        </button>
+
+        <!-- Live US Market Session Countdown & Progress Ring -->
+        <div id="market-countdown-pill" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 36 36">
+            <path class="text-black/[0.08] dark:text-white/[0.1]" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path id="market-progress-ring" class="market-progress-ring-circle text-indigo-500" stroke-dasharray="100, 100" stroke-dashoffset="25" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          </svg>
+          <span id="market-countdown-text" class="text-[11px] font-mono font-medium text-slate-600 dark:text-slate-300">Market Open</span>
+        </div>
+
         <!-- Live US Market Status Pill -->
         <div id="market-status-pill" class="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
           <span id="market-dot" class="w-2 h-2 rounded-full bg-amber-500 market-pulse-amber"></span>
@@ -455,6 +475,40 @@
       </div>
     </section>
 
+    <!-- Asset Risk vs. Return Bubble Matrix (2D Scatter Plot) -->
+    <section id="risk-return-matrix-section" class="p-6 rounded-3xl apple-glass space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="crosshair" class="w-4 h-4 text-indigo-500"></i>
+            <span>Asset Risk vs. Expected Return Matrix (2D Scatter Plot)</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Quadrant categorization based on ML volatility spread (X-axis) and projected 60-day return (Y-axis). Bubble size represents portfolio weighting.
+          </p>
+        </div>
+        <!-- Quadrant Legend Pills -->
+        <div class="flex items-center gap-2 flex-wrap text-[11px] font-semibold">
+          <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+            ★ Growth Anchors
+          </span>
+          <span class="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+            🛡️ Defensive Rocks
+          </span>
+          <span class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            ⚡ High-Beta Growth
+          </span>
+          <span class="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            ⚠️ Laggards
+          </span>
+        </div>
+      </div>
+
+      <div class="relative h-[340px] w-full">
+        <canvas id="portfolioRiskReturnChart"></canvas>
+      </div>
+    </section>
+
     <!-- Macro Stress-Testing & Market Crash Simulator Section -->
     <section id="stress-test-section" class="p-6 rounded-3xl apple-glass space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
@@ -691,6 +745,108 @@
             </thead>
             <tbody id="portfolio-monthly-tbody" class="divide-y divide-black/[0.04] dark:divide-white/[0.06]"></tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- "Goal Milestone" Time-to-Target Calculator -->
+    <section id="goal-milestone-section" class="p-6 rounded-3xl apple-glass space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i>
+            <span>Financial Goal Milestone & Time-to-Target Calculator</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            ML-projected countdown date and required compound growth to reach your portfolio wealth milestones.
+          </p>
+        </div>
+        <div id="milestone-cagr-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+          Projected CAGR: +0.00%
+        </div>
+      </div>
+
+      <!-- Milestone Input & Presets Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+        <!-- Input & Quick Presets (7 cols) -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="space-y-1.5">
+            <label for="milestone-target-input" class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+              Set Portfolio Target Milestone ($)
+            </label>
+            <div class="relative">
+              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">$</span>
+              <input
+                type="number"
+                id="milestone-target-input"
+                min="1000"
+                step="1000"
+                value="50000"
+                class="w-full pl-8 pr-4 py-2.5 rounded-2xl apple-glass text-lg font-extrabold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              />
+            </div>
+          </div>
+
+          <!-- Quick Target Preset Pills -->
+          <div class="flex items-center gap-2 flex-wrap text-xs">
+            <span class="text-slate-400 text-[11px] font-medium mr-1">Quick Presets:</span>
+            <button type="button" class="milestone-preset-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/40 text-[11px] font-mono font-semibold transition" data-target="25000">$25K</button>
+            <button type="button" class="milestone-preset-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/40 text-[11px] font-mono font-semibold transition" data-target="50000">$50K</button>
+            <button type="button" class="milestone-preset-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/40 text-[11px] font-mono font-semibold transition" data-target="100000">$100K</button>
+            <button type="button" class="milestone-preset-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/40 text-[11px] font-mono font-semibold transition" data-target="250000">$250K</button>
+            <button type="button" class="milestone-preset-btn px-3 py-1 rounded-full apple-glass text-slate-700 dark:text-slate-300 hover:text-indigo-500 hover:border-indigo-500/40 text-[11px] font-mono font-semibold transition" data-target="1000000">$1M 🚀</button>
+          </div>
+
+          <!-- Milestone Slider -->
+          <div class="space-y-1 pt-1">
+            <input
+              type="range"
+              id="milestone-slider"
+              min="1000"
+              max="250000"
+              step="1000"
+              value="50000"
+              class="w-full h-2 bg-black/10 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            />
+            <div class="flex justify-between text-[10px] text-slate-400 font-mono px-1">
+              <span>$1K</span>
+              <span>$50K</span>
+              <span>$100K</span>
+              <span>$175K</span>
+              <span>$250K+</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Target Projected Output Card (5 cols) -->
+        <div class="lg:col-span-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Projected Hit Date</span>
+            <span id="milestone-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">On Track</span>
+          </div>
+          <div>
+            <div id="milestone-projected-date" class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
+              Calculating...
+            </div>
+            <div id="milestone-time-remaining" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+              Estimated 0 months away
+            </div>
+          </div>
+
+          <!-- Progress toward target bar -->
+          <div class="space-y-1.5 pt-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400">Current Progress:</span>
+              <span id="milestone-progress-pct" class="font-bold text-slate-900 dark:text-white font-mono">0.0%</span>
+            </div>
+            <div class="w-full h-2.5 bg-black/[0.08] dark:bg-white/[0.08] rounded-full overflow-hidden">
+              <div id="milestone-progress-bar" class="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-500 rounded-full" style="width: 0%"></div>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+              <span>Current: <b id="milestone-curr-val" class="text-slate-600 dark:text-slate-300 privacy-value">$0.00</b></span>
+              <span>Target: <b id="milestone-target-val" class="text-indigo-500 privacy-value">$50,000</b></span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1016,6 +1172,37 @@
     <p>StockCast ML &copy; Personal Stock Price Forecasting Application</p>
     <p class="mt-1">Powered by Alpaca Market Data API v2 & Scikit-Learn Quantile Engine</p>
   </footer>
+
+  <!-- Quick Command Palette (Spotlight Search: ⌘K / Ctrl+K) -->
+  <div id="command-palette-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-md hidden items-start justify-center pt-20 px-4">
+    <div id="command-palette-modal" class="w-full max-w-xl rounded-2xl apple-glass shadow-2xl border border-black/10 dark:border-white/10 overflow-hidden transform transition-all">
+      <!-- Input Row -->
+      <div class="flex items-center px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <i data-lucide="search" class="w-5 h-5 text-indigo-500 mr-3 shrink-0"></i>
+        <input
+          type="text"
+          id="cmd-palette-input"
+          placeholder="Search tickers, switch pages, or execute commands... (ESC to exit)"
+          class="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <kbd class="text-[10px] px-2 py-0.5 rounded bg-black/[0.06] dark:border-white/[0.08] font-mono text-slate-400">ESC</kbd>
+      </div>
+      <!-- Suggestions / Results List -->
+      <div id="cmd-palette-results" class="max-h-80 overflow-y-auto divide-y divide-black/[0.04] dark:divide-white/[0.04] p-2 space-y-1">
+        <!-- Dynamically populated commands / tickers -->
+      </div>
+      <!-- Footer Hints -->
+      <div class="px-4 py-2.5 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[11px] text-slate-400">
+        <div class="flex items-center space-x-3">
+          <span><kbd class="font-mono text-[10px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 rounded">↑</kbd> <kbd class="font-mono text-[10px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 rounded">↓</kbd> Navigate</span>
+          <span><kbd class="font-mono text-[10px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 rounded">↵</kbd> Select</span>
+        </div>
+        <span class="font-mono">StockCast Spotlight</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Apple-Style Floating Toast Notification Container -->
   <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>

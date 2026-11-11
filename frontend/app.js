@@ -54,6 +54,125 @@ function getFormattedETTime(dateObj = new Date()) {
   }
 }
 
+/**
+ * Smooth Apple/Robinhood-Style Rolling Number Count-Up Animation
+ */
+function animateValue(elem, start, end, duration = 800, formatter = (v) => v.toFixed(2)) {
+  if (!elem) return;
+  if (isNaN(start) || isNaN(end) || Math.abs(start - end) < 0.0001) {
+    elem.textContent = formatter(end);
+    return;
+  }
+  const startTime = performance.now();
+  const diff = end - start;
+
+  function step(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Cubic ease-out curve
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const current = start + diff * ease;
+    elem.textContent = formatter(current);
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      elem.textContent = formatter(end);
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
+/**
+ * Live Price Flash Pulse Glow Animation (Emerald for up, Rose for down)
+ */
+function flashElement(elem, direction = "up") {
+  if (!elem) return;
+  const cls = direction === "up" ? "flash-emerald" : "flash-rose";
+  elem.classList.remove("flash-emerald", "flash-rose");
+  void elem.offsetWidth; // Force CSS reflow
+  elem.classList.add(cls);
+  setTimeout(() => {
+    elem.classList.remove(cls);
+  }, 1200);
+}
+
+/**
+ * Live US Market Trading Clock & Circular Session Progress Ring
+ * Regular NYSE Hours: 9:30 AM - 4:00 PM US Eastern Time (Monday-Friday)
+ */
+function updateMarketClock() {
+  const textElem = document.getElementById("market-countdown-text");
+  const ringElem = document.getElementById("market-progress-ring");
+  if (!textElem && !ringElem) return;
+
+  try {
+    const now = new Date();
+    const etFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour12: false,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      weekday: "short"
+    });
+    const parts = etFormatter.formatToParts(now);
+    const getPart = (type) => parts.find((p) => p.type === type)?.value;
+    const weekday = getPart("weekday");
+    const h = parseInt(getPart("hour"), 10);
+    const m = parseInt(getPart("minute"), 10);
+
+    const isWeekend = weekday === "Sat" || weekday === "Sun";
+    const minutesSinceMidnight = h * 60 + m;
+    const openMinutes = 9 * 60 + 30; // 9:30 AM
+    const closeMinutes = 16 * 60;    // 4:00 PM
+    const totalSessionMinutes = closeMinutes - openMinutes; // 390 mins
+
+    let progressPct = 0;
+    let label = "Market Open";
+
+    if (isWeekend) {
+      label = "Weekend (Closed)";
+      progressPct = 0;
+    } else if (minutesSinceMidnight < openMinutes) {
+      const minsToOpen = openMinutes - minutesSinceMidnight;
+      const hoursToOpen = Math.floor(minsToOpen / 60);
+      const remMins = minsToOpen % 60;
+      label = hoursToOpen > 0 ? `Opens in ${hoursToOpen}h ${remMins}m` : `Opens in ${remMins}m`;
+      progressPct = 0;
+    } else if (minutesSinceMidnight >= closeMinutes) {
+      const formattedClose = `${h % 12 || 12}:${m < 10 ? "0" + m : m} ${h >= 12 ? "PM" : "AM"} ET`;
+      label = `Market Closed (${formattedClose})`;
+      progressPct = 100;
+    } else {
+      // Market is actively open
+      const minsElapsed = minutesSinceMidnight - openMinutes;
+      const minsRemaining = closeMinutes - minutesSinceMidnight;
+      const hoursRem = Math.floor(minsRemaining / 60);
+      const remMins = minsRemaining % 60;
+      progressPct = Math.min(100, Math.max(0, (minsElapsed / totalSessionMinutes) * 100));
+      label = hoursRem > 0 ? `Closes in ${hoursRem}h ${remMins}m` : `Closes in ${remMins}m`;
+    }
+
+    if (textElem) textElem.textContent = label;
+    if (ringElem) {
+      const offset = 100 - (progressPct * 100 / 100);
+      ringElem.style.strokeDashoffset = offset;
+      if (minutesSinceMidnight >= openMinutes && minutesSinceMidnight < closeMinutes && !isWeekend) {
+        ringElem.setAttribute("class", "market-progress-ring-circle text-emerald-500");
+      } else {
+        ringElem.setAttribute("class", "market-progress-ring-circle text-indigo-500");
+      }
+    }
+  } catch (err) {
+    console.warn("Market clock update error:", err);
+  }
+}
+
 // Chart.js instances
 let forecastChart = null;
 let dailyForecastChart = null;
@@ -73,6 +192,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initVisibilityListener();
   checkHealth();
   setInterval(checkHealth, 30000); // Check US market trading session status every 30s
+  updateMarketClock();
+  setInterval(updateMarketClock, 30000); // Update market clock progress ring every 30s
+  initCommandPalette();
 
   // URL Deep Linking: Check if ?ticker=XYZ and ?model=XYZ are present in the browser address bar
   const urlParams = new URLSearchParams(window.location.search);
@@ -954,7 +1076,17 @@ function renderDashboard(data, isLiveUpdate = false) {
   }
 
   const quote = data.quote;
-  document.getElementById("current-price").textContent = `$${quote.price.toFixed(2)}`;
+  const priceElem = document.getElementById("current-price");
+  if (priceElem) {
+    const rawPrev = parseFloat(priceElem.textContent.replace(/[^0-9.-]/g, ""));
+    const prevPrice = isNaN(rawPrev) ? quote.price : rawPrev;
+    if (Math.abs(prevPrice - quote.price) > 0.001) {
+      animateValue(priceElem, prevPrice, quote.price, 800, (val) => `$${val.toFixed(2)}`);
+      flashElement(priceElem, quote.price >= prevPrice ? "up" : "down");
+    } else {
+      priceElem.textContent = `$${quote.price.toFixed(2)}`;
+    }
+  }
 
   const priceTsElem = document.getElementById("price-timestamp");
   if (priceTsElem) {
@@ -1198,6 +1330,14 @@ function renderNewsSentiment(sentiment) {
 
   if (!sentiment) return;
 
+  // 1. Tachometer Speedometer Needle Sweep
+  const needle = document.getElementById("sentiment-gauge-needle");
+  if (needle && typeof sentiment.sentiment_score === "number") {
+    // Map score (-100 to +100) -> (-75deg to +75deg)
+    const angle = Math.max(-75, Math.min(75, (sentiment.sentiment_score / 100) * 75));
+    needle.style.transform = `rotate(${angle}deg)`;
+  }
+
   if (badge) {
     badge.textContent = sentiment.classification;
     if (sentiment.sentiment_score >= 15) {
@@ -1210,13 +1350,16 @@ function renderNewsSentiment(sentiment) {
   }
 
   if (scoreVal) {
-    const sign = sentiment.sentiment_score > 0 ? "+" : "";
-    scoreVal.textContent = `${sign}${sentiment.sentiment_score.toFixed(1)}`;
-    scoreVal.className = sentiment.sentiment_score >= 0 ? "text-lg font-extrabold text-emerald-500" : "text-lg font-extrabold text-rose-500";
+    const rawPrev = parseFloat(scoreVal.textContent.replace(/[^0-9.-]/g, ""));
+    const prevScore = isNaN(rawPrev) ? 0 : rawPrev;
+    animateValue(scoreVal, prevScore, sentiment.sentiment_score, 900, (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`);
+    scoreVal.className = sentiment.sentiment_score >= 0 ? "text-base sm:text-lg font-extrabold text-emerald-500" : "text-base sm:text-lg font-extrabold text-rose-500";
   }
 
   if (confVal) {
-    confVal.textContent = `${sentiment.confidence_pct}%`;
+    const rawPrevConf = parseFloat(confVal.textContent.replace(/[^0-9.-]/g, ""));
+    const prevConf = isNaN(rawPrevConf) ? 0 : rawPrevConf;
+    animateValue(confVal, prevConf, sentiment.confidence_pct, 900, (v) => `${Math.round(v)}%`);
   }
 
   if (descText) {
@@ -1776,6 +1919,20 @@ function renderDailyForecastChart(dailyForecast, isLiveUpdate = false) {
             label: function (context) {
               return `${context.dataset.label}: $${context.parsed.y.toFixed(2)}`;
             },
+            afterBody: function (items) {
+              if (!items || !items.length || !dailyForecast) return [];
+              const idx = items[0].dataIndex;
+              const pt = dailyForecast[idx];
+              if (!pt || !latestForecastData || !latestForecastData.quote) return [];
+              const curPrice = latestForecastData.quote.price;
+              const roi = ((pt.mean - curPrice) / curPrice) * 100;
+              const roiSign = roi >= 0 ? "+" : "";
+              const spread = pt.max - pt.min;
+              return [
+                `Expected ROI: ${roiSign}${roi.toFixed(2)}%`,
+                `Spread: $${spread.toFixed(2)} (Min: $${pt.min.toFixed(2)} — Max: $${pt.max.toFixed(2)})`
+              ];
+            },
           },
         },
       },
@@ -1923,6 +2080,21 @@ function renderMonthlyForecast(monthlyRes, isLiveUpdate = false) {
             label: function (context) {
               return `${context.dataset.label}: $${context.parsed.y.toFixed(2)}`;
             },
+            afterBody: function (items) {
+              if (!items || !items.length || !monthlyPoints) return [];
+              const idx = items[0].dataIndex;
+              const pt = monthlyPoints[idx];
+              if (!pt || !latestForecastData || !latestForecastData.quote) return [];
+              const curPrice = latestForecastData.quote.price;
+              const roi = ((pt.mean - curPrice) / curPrice) * 100;
+              const roiSign = roi >= 0 ? "+" : "";
+              const spread = pt.max - pt.min;
+              return [
+                `Period: ${pt.year_month} (Month +${idx + 1})`,
+                `Projected Growth: ${roiSign}${roi.toFixed(2)}%`,
+                `Spread: $${spread.toFixed(2)} (Min: $${pt.min.toFixed(2)} — Max: $${pt.max.toFixed(2)})`
+              ];
+            },
           },
         },
       },
@@ -2005,5 +2177,212 @@ function updateNavPortfolioBadge() {
   } catch (e) {
     badge.classList.add("hidden");
   }
+}
+
+/**
+ * Quick Command Palette (Spotlight Search: ⌘K / Ctrl+K / /)
+ */
+function initCommandPalette() {
+  const trigger = document.getElementById("cmd-palette-trigger");
+  const backdrop = document.getElementById("command-palette-backdrop");
+  const input = document.getElementById("cmd-palette-input");
+  const results = document.getElementById("cmd-palette-results");
+  if (!backdrop || !input || !results) return;
+
+  let selectedIdx = 0;
+  let currentItems = [];
+
+  const defaultCommands = [
+    { type: "nav", label: "Owned Stocks Forecast & Portfolio", sub: "Go to your portfolio dashboard and allocations", icon: "briefcase", action: () => window.location.href = "/portfolio.html" },
+    { type: "action", label: "Toggle Dark / Light Theme", sub: "Switch visual glass display mode", icon: "sun-moon", action: () => { const t = document.getElementById("theme-toggle"); if (t) t.click(); } },
+    { type: "action", label: "Recalculate Single Stock Forecast", sub: "Rerun machine learning models for current ticker", icon: "refresh-cw", action: () => { const f = document.getElementById("search-form"); if (f) f.dispatchEvent(new Event("submit")); } },
+    { type: "action", label: "Export 30-Day Projections (CSV)", sub: "Download complete quantile predictions table", icon: "download", action: () => { const b = document.getElementById("export-30d-csv-btn"); if (b) b.click(); } },
+    { type: "ticker", ticker: "NVDA", label: "NVIDIA Corporation", sub: "Semiconductors & AI Accelerated Hardware", icon: "trending-up" },
+    { type: "ticker", ticker: "AAPL", label: "Apple Inc.", sub: "Consumer Technology, Services & Ecosystem", icon: "trending-up" },
+    { type: "ticker", ticker: "MSFT", label: "Microsoft Corporation", sub: "Cloud Azure, Enterprise Software & AI", icon: "trending-up" },
+    { type: "ticker", ticker: "TSLA", label: "Tesla, Inc.", sub: "Electric Autonomous Vehicles & Robotics", icon: "trending-up" },
+    { type: "ticker", ticker: "AMZN", label: "Amazon.com, Inc.", sub: "E-Commerce Logistics & AWS Infrastructure", icon: "trending-up" },
+    { type: "ticker", ticker: "GOOGL", label: "Alphabet Inc.", sub: "Search, Google Cloud & Gemini AI", icon: "trending-up" },
+    { type: "ticker", ticker: "ANT", label: "Anthropic (Pre-IPO / Nov 19)", sub: "AI Research & Claude Language Models", icon: "sparkles" }
+  ];
+
+  function openPalette() {
+    backdrop.classList.remove("hidden");
+    backdrop.classList.add("flex");
+    input.value = "";
+    selectedIdx = 0;
+    renderResults(defaultCommands);
+    setTimeout(() => input.focus(), 60);
+  }
+
+  function closePalette() {
+    backdrop.classList.add("hidden");
+    backdrop.classList.remove("flex");
+  }
+
+  function renderResults(items) {
+    currentItems = items;
+    results.innerHTML = "";
+    if (!items || items.length === 0) {
+      results.innerHTML = `<div class="p-4 text-xs text-center text-slate-400">No matching commands or tickers found.</div>`;
+      return;
+    }
+
+    items.forEach((item, idx) => {
+      const row = document.createElement("div");
+      const isSel = idx === selectedIdx;
+      row.className = `cmd-palette-item px-3.5 py-2.5 rounded-xl cursor-pointer flex items-center justify-between transition ${isSel ? "selected bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20" : "text-slate-700 dark:text-slate-200"}`;
+      
+      const badge = item.ticker ? `<span class="px-2 py-0.5 rounded font-mono font-bold text-xs bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">${escapeHtml(item.ticker)}</span>` : `<i data-lucide="${item.icon || 'arrow-right'}" class="w-4 h-4 text-slate-400"></i>`;
+      
+      row.innerHTML = `
+        <div class="flex items-center space-x-3 min-w-0 pr-2">
+          <div class="w-7 h-7 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] flex items-center justify-center shrink-0">
+            <i data-lucide="${item.icon || 'search'}" class="w-3.5 h-3.5 text-indigo-500"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-semibold truncate">${escapeHtml(item.label)}</div>
+            ${item.sub ? `<div class="text-[10px] text-slate-400 truncate">${escapeHtml(item.sub)}</div>` : ""}
+          </div>
+        </div>
+        <div class="shrink-0">${badge}</div>
+      `;
+
+      row.addEventListener("mouseenter", () => {
+        selectedIdx = idx;
+        updateSelectionHighlight();
+      });
+
+      row.addEventListener("click", () => {
+        executeItem(item);
+      });
+
+      results.appendChild(row);
+    });
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function updateSelectionHighlight() {
+    const children = results.querySelectorAll(".cmd-palette-item");
+    children.forEach((c, i) => {
+      if (i === selectedIdx) {
+        c.classList.add("selected", "bg-indigo-500/10", "dark:bg-indigo-500/20");
+        c.scrollIntoView({ block: "nearest" });
+      } else {
+        c.classList.remove("selected", "bg-indigo-500/10", "dark:bg-indigo-500/20");
+      }
+    });
+  }
+
+  function executeItem(item) {
+    closePalette();
+    if (item.action) {
+      item.action();
+    } else if (item.ticker) {
+      const tickerInput = document.getElementById("ticker-input");
+      if (tickerInput) {
+        tickerInput.value = item.ticker;
+        fetchForecast(item.ticker);
+      }
+    }
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      if (backdrop.classList.contains("hidden")) {
+        openPalette();
+      } else {
+        closePalette();
+      }
+    } else if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      openPalette();
+    } else if (e.key === "Escape" && !backdrop.classList.contains("hidden")) {
+      e.preventDefault();
+      closePalette();
+    } else if (!backdrop.classList.contains("hidden")) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (currentItems.length > 0) {
+          selectedIdx = (selectedIdx + 1) % currentItems.length;
+          updateSelectionHighlight();
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (currentItems.length > 0) {
+          selectedIdx = (selectedIdx - 1 + currentItems.length) % currentItems.length;
+          updateSelectionHighlight();
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (currentItems.length > 0 && currentItems[selectedIdx]) {
+          executeItem(currentItems[selectedIdx]);
+        }
+      }
+    }
+  });
+
+  if (trigger) {
+    trigger.addEventListener("click", openPalette);
+  }
+
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      closePalette();
+    }
+  });
+
+  let searchTimer = null;
+  input.addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    clearTimeout(searchTimer);
+    if (!q) {
+      selectedIdx = 0;
+      renderResults(defaultCommands);
+      return;
+    }
+
+    searchTimer = setTimeout(async () => {
+      const localMatches = defaultCommands.filter((c) =>
+        c.label.toLowerCase().includes(q) ||
+        (c.sub && c.sub.toLowerCase().includes(q)) ||
+        (c.ticker && c.ticker.toLowerCase().includes(q))
+      );
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const apiMatches = (data.results || []).map((r) => ({
+            type: "ticker",
+            ticker: r.ticker,
+            label: r.name,
+            sub: r.aliases || "Exchange Listed Stock",
+            icon: "trending-up"
+          }));
+
+          const seen = new Set(localMatches.map((m) => m.ticker || m.label));
+          const merged = [...localMatches];
+          apiMatches.forEach((am) => {
+            if (!seen.has(am.ticker)) {
+              seen.add(am.ticker);
+              merged.push(am);
+            }
+          });
+
+          selectedIdx = 0;
+          renderResults(merged);
+        } else {
+          selectedIdx = 0;
+          renderResults(localMatches);
+        }
+      } catch (err) {
+        selectedIdx = 0;
+        renderResults(localMatches);
+      }
+    }, 150);
+  });
 }
 
