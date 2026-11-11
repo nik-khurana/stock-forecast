@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: stockcast-ml
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ALPACA_API_KEY_ID
+        sync: false
+      - key: ALPACA_API_SECRET_KEY
+        sync: false
+      - key: ALPACA_BASE_URL
+        value: https://paper-api.alpaca.markets/v2
+      - key: ALPACA_DATA_URL
+        value: https://data.alpaca.markets/v2
