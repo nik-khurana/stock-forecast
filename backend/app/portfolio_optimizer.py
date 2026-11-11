@@ -16,9 +16,10 @@ This module implements:
    - Real-time custom shock simulator (-30% to +30%).
 """
 
+import time
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from scipy.optimize import minimize
 import logging
 
@@ -32,6 +33,7 @@ class PortfolioOptimizer:
     """
     Quantitative optimization and stress-testing engine for multi-holding portfolios.
     """
+    _SPY_CACHE: Optional[Tuple[float, np.ndarray]] = None
 
     def __init__(self):
         self.alpaca_client = AlpacaClient()
@@ -39,7 +41,8 @@ class PortfolioOptimizer:
     def optimize_portfolio(
         self,
         holdings: List[Dict[str, Any]],
-        risk_profile: str = "balanced"
+        risk_profile: str = "balanced",
+        historical_bars_dict: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Executes Modern Portfolio Theory optimization on holdings.
@@ -47,6 +50,7 @@ class PortfolioOptimizer:
         Parameters:
             holdings: List of dicts with 'ticker', 'shares', 'buy_price', and 'current_price'.
             risk_profile: 'conservative' (Min Volatility), 'balanced' (Max Sharpe), or 'aggressive' (Growth).
+            historical_bars_dict: Optional pre-fetched bars to eliminate redundant downloads.
             
         Returns:
             Dict containing current vs optimal weights, dollar changes, Sharpe metrics,
@@ -73,17 +77,30 @@ class PortfolioOptimizer:
         n_assets = len(tickers)
 
         # -------------------------------------------------------------
-        # STEP 1: Fetch Historical Daily Closes for Assets & SPY Benchmark
+        # STEP 1: Fetch/Reuse Historical Daily Closes for Assets & SPY
         # -------------------------------------------------------------
         returns_dict = {}
         for tk in tickers:
-            df, _ = self.alpaca_client.get_historical_bars(tk, years=2)
-            if not df.empty and "close" in df.columns:
+            df = None
+            if historical_bars_dict and tk in historical_bars_dict:
+                df = historical_bars_dict[tk]
+            else:
+                df, _ = self.alpaca_client.get_historical_bars(tk, years=2)
+
+            if df is not None and not df.empty and "close" in df.columns:
                 returns_dict[tk] = np.log(df["close"] / df["close"].shift(1)).dropna().values
 
-        # Fetch SPY benchmark returns for Beta calculation
-        spy_df, _ = self.alpaca_client.get_historical_bars("SPY", years=2)
-        spy_returns = np.log(spy_df["close"] / spy_df["close"].shift(1)).dropna().values if not spy_df.empty else None
+        # Fetch/reuse SPY benchmark returns for Beta calculation (cached for 24h)
+        now_ts = time.time()
+        if PortfolioOptimizer._SPY_CACHE and (now_ts - PortfolioOptimizer._SPY_CACHE[0] < 86400):
+            spy_returns = PortfolioOptimizer._SPY_CACHE[1]
+        else:
+            spy_df, _ = self.alpaca_client.get_historical_bars("SPY", years=2)
+            if not spy_df.empty and "close" in spy_df.columns:
+                spy_returns = np.log(spy_df["close"] / spy_df["close"].shift(1)).dropna().values
+                PortfolioOptimizer._SPY_CACHE = (now_ts, spy_returns)
+            else:
+                spy_returns = None
 
         # Align series to common minimum length
         min_len = min((len(v) for v in returns_dict.values()), default=0)

@@ -29,10 +29,23 @@ let currentMarketSession = "closed";
 let currentEditHoldingIndex = -1;
 let currentAdjustAction = "buy"; // "buy" or "sell"
 
-// Live 10-Second Market Streaming State
+// Synchronized 10-Minute Market Streaming State (:00, :10, :20, :30, :40, :50)
 let portfolioLiveTimer = null;
 let isPortfolioLiveUpdating = false;
-const LIVE_PORTFOLIO_INTERVAL_MS = 10000; // Exactly 10 seconds (6 requests/minute)
+
+/**
+ * Calculates milliseconds remaining until the next wall-clock 10-minute mark
+ * (:00, :10, :20, :30, :40, or :50 minutes). Includes a 500ms safety buffer.
+ */
+function getMsUntilNext10MinMark() {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const ms = now.getMilliseconds();
+  const minutesToNext = 10 - (minutes % 10);
+  const msUntilNext = (minutesToNext * 60 - seconds) * 1000 - ms + 500;
+  return msUntilNext > 0 ? msUntilNext : 600000;
+}
 
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
@@ -1266,6 +1279,7 @@ function renderHoldingsTable() {
     let pnlStr = "...";
     let pnlColor = "text-slate-400";
     let weightStr = "...";
+    let tsSubtext = "";
 
     if (portfolioForecastData && portfolioForecastData.holdings_breakdown) {
       const match = portfolioForecastData.holdings_breakdown.find((item) => item.ticker === h.ticker);
@@ -1276,6 +1290,10 @@ function renderHoldingsTable() {
         pnlStr = `${sign}$${match.pnl.toFixed(2)} (${sign}${match.pnl_pct.toFixed(2)}%)`;
         pnlColor = match.pnl >= 0 ? "text-emerald-500" : "text-rose-500";
         weightStr = `${match.weight_pct}%`;
+        if (match.quote_timestamp_formatted || match.quote_timestamp) {
+          const displayTs = match.quote_timestamp_formatted || match.quote_timestamp;
+          tsSubtext = `<div class="text-[9px] text-slate-400 font-mono font-normal tracking-tight">${escapeHtml(displayTs)}</div>`;
+        }
       }
     }
 
@@ -1289,7 +1307,10 @@ function renderHoldingsTable() {
       </td>
       <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 font-medium">${safeShares}</td>
       <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 privacy-value">$${h.buy_price.toFixed(2)}</td>
-      <td class="py-3 px-4 text-right text-indigo-600 dark:text-indigo-400 font-semibold privacy-value">${livePriceStr}</td>
+      <td class="py-3 px-4 text-right text-indigo-600 dark:text-indigo-400 font-semibold privacy-value">
+        <div>${livePriceStr}</div>
+        ${tsSubtext}
+      </td>
       <td class="py-3 px-4 text-right text-slate-500 dark:text-slate-400 privacy-value">$${costBasis}</td>
       <td class="py-3 px-4 text-right font-bold text-slate-900 dark:text-white privacy-value">${currValStr}</td>
       <td class="py-3 px-4 text-right font-semibold ${pnlColor} privacy-value">${pnlStr}</td>
@@ -1580,6 +1601,12 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
   // Update KPI Cards
   setTxt("portfolio-cost-basis", `$${data.total_cost_basis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
   setTxt("portfolio-current-value", `$${data.current_portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+  const portTsElem = document.getElementById("portfolio-price-timestamp");
+  if (portTsElem) {
+    const tsStr = data.as_of_formatted || (data.as_of_timestamp ? new Date(data.as_of_timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null);
+    portTsElem.textContent = tsStr ? `As of ${tsStr}` : `As of ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
 
   const isPos = data.total_unrealized_pnl >= 0;
   const pnlSign = isPos ? "+" : "";
@@ -2454,7 +2481,7 @@ async function checkPortfolioMarketStatus() {
 }
 
 /**
- * Synchronizes the 10-second live background streaming interval for portfolio forecasts.
+ * Synchronizes the 10-minute live background streaming interval aligned to wall-clock marks (:00, :10, :20...).
  * Active when regular or extended US markets are open, tab is visible, vault is unlocked, and positions exist.
  */
 function syncPortfolioLiveStreaming() {
@@ -2471,15 +2498,15 @@ function syncPortfolioLiveStreaming() {
       if (currentMarketSession === "pre_market") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10s Pre-Market Live";
+        if (labelSpan) labelSpan.textContent = "10m Pre-Market Sync";
       } else if (currentMarketSession === "after_hours") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-indigo-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10s After-Hours Live";
+        if (labelSpan) labelSpan.textContent = "10m After-Hours Sync";
       } else {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10s Live Sync";
+        if (labelSpan) labelSpan.textContent = "10m Sync (:00, :10...)";
       }
     } else {
       badge.classList.add("hidden");
@@ -2489,20 +2516,34 @@ function syncPortfolioLiveStreaming() {
 
   if (shouldStream) {
     if (!portfolioLiveTimer) {
-      portfolioLiveTimer = setInterval(triggerPortfolioLiveRefresh, LIVE_PORTFOLIO_INTERVAL_MS);
-      console.log(`[Portfolio Live] Started 10s streaming interval (${currentMarketSession})`);
+      scheduleNextPortfolioLiveRefresh();
+      console.log(`[Portfolio Live] Scheduled synchronized 10-minute updates (${currentMarketSession})`);
     }
   } else {
     if (portfolioLiveTimer) {
-      clearInterval(portfolioLiveTimer);
+      clearTimeout(portfolioLiveTimer);
       portfolioLiveTimer = null;
-      console.log("[Portfolio Live] Paused 10s streaming interval");
+      console.log("[Portfolio Live] Paused 10m streaming interval");
     }
   }
 }
 
+function scheduleNextPortfolioLiveRefresh() {
+  if (portfolioLiveTimer) {
+    clearTimeout(portfolioLiveTimer);
+    portfolioLiveTimer = null;
+  }
+  const delayMs = getMsUntilNext10MinMark();
+  const nextTarget = new Date(Date.now() + delayMs);
+  console.log(`[Portfolio Live] Next 10m price sync in ${Math.round(delayMs / 1000)}s (at ${nextTarget.toLocaleTimeString()})`);
+  portfolioLiveTimer = setTimeout(() => {
+    triggerPortfolioLiveRefresh();
+    scheduleNextPortfolioLiveRefresh();
+  }, delayMs);
+}
+
 /**
- * Triggered every 10 seconds during active market session.
+ * Triggered every 10 minutes at wall-clock boundaries (:00, :10, :20, :30, :40, :50).
  */
 function triggerPortfolioLiveRefresh() {
   if (!isMarketSessionOpen || document.hidden || isPortfolioLiveUpdating || isVaultLocked || portfolioHoldings.length === 0) {
@@ -2512,20 +2553,17 @@ function triggerPortfolioLiveRefresh() {
 }
 
 /**
- * Handles tab blur / minimize to pause live streaming and immediate resume upon focus.
+ * Handles tab blur / minimize to pause live streaming and resume upon focus.
  */
 function initPortfolioVisibilityListener() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       if (portfolioLiveTimer) {
-        clearInterval(portfolioLiveTimer);
+        clearTimeout(portfolioLiveTimer);
         portfolioLiveTimer = null;
       }
     } else {
       syncPortfolioLiveStreaming();
-      if (isMarketSessionOpen && portfolioHoldings.length > 0 && !isVaultLocked) {
-        triggerPortfolioLiveRefresh();
-      }
     }
   });
 }

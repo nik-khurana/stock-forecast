@@ -3,10 +3,15 @@
 
 FROM python:3.11-slim
 
-# Set environment variables for Python optimization
+# Set environment variables for Python optimization and strict thread bounding (2 CPU / 1GB RAM)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=7860
+    PORT=7860 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1
 
 # Install minimal OS dependencies if needed
 RUN apt-get update && apt-get install -y --no-install-recommends \

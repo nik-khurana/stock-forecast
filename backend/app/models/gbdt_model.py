@@ -28,16 +28,21 @@ class GBDTModel:
     Generates 30-day multi-step recursive forecasts with expanding confidence bands.
     """
 
-    def __init__(self):
+    def __init__(self, max_iter: int = 50, max_depth: int = 5):
         # StandardScaler standardizes features (mean=0, variance=1) for numerical stability
         self.scaler = StandardScaler()
+        self.max_iter = max_iter
+        self.max_depth = max_depth
 
         # Model 1: 10th Percentile Regressor (Lower boundary / Min)
         self.model_lower = HistGradientBoostingRegressor(
             loss="quantile",
             quantile=0.10,
-            max_iter=120,     # Number of boosting iterations (trees)
-            max_depth=6,      # Maximum tree depth to prevent overfitting
+            max_iter=max_iter,
+            max_depth=max_depth,
+            early_stopping=True,
+            n_iter_no_change=8,
+            tol=1e-4,
             random_state=42
         )
 
@@ -45,8 +50,11 @@ class GBDTModel:
         self.model_median = HistGradientBoostingRegressor(
             loss="quantile",
             quantile=0.50,
-            max_iter=120,
-            max_depth=6,
+            max_iter=max_iter,
+            max_depth=max_depth,
+            early_stopping=True,
+            n_iter_no_change=8,
+            tol=1e-4,
             random_state=42
         )
 
@@ -54,8 +62,11 @@ class GBDTModel:
         self.model_upper = HistGradientBoostingRegressor(
             loss="quantile",
             quantile=0.90,
-            max_iter=120,
-            max_depth=6,
+            max_iter=max_iter,
+            max_depth=max_depth,
+            early_stopping=True,
+            n_iter_no_change=8,
+            tol=1e-4,
             random_state=42
         )
         self.feature_cols: List[str] = []

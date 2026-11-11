@@ -18,12 +18,25 @@ let selectedModel = "ensemble";         // Active model: 'ensemble', 'gbdt', or 
 let selectedHistoryWeeks = 104;         // Active history timeframe: 104 (default), 52, 26, or 'all'
 let showSupportLine = true;             // Dynamic support level floor toggle state
 
-// Live 10-Second Market Streaming State
+// Synchronized 10-Minute Market Streaming State (:00, :10, :20, :30, :40, :50)
 let isMarketOpen = false;
 let currentMarketSession = "closed";
 let liveStreamTimer = null;
 let isLiveStreamingUpdating = false;
-const LIVE_STREAM_INTERVAL_MS = 10000;  // Exactly 10 seconds (6 requests/minute)
+
+/**
+ * Calculates milliseconds remaining until the next wall-clock 10-minute mark
+ * (:00, :10, :20, :30, :40, or :50 minutes). Includes a 500ms safety buffer.
+ */
+function getMsUntilNext10MinMark() {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const ms = now.getMilliseconds();
+  const minutesToNext = 10 - (minutes % 10);
+  const msUntilNext = (minutesToNext * 60 - seconds) * 1000 - ms + 500;
+  return msUntilNext > 0 ? msUntilNext : 600000;
+}
 
 // Chart.js instances
 let forecastChart = null;
@@ -615,7 +628,7 @@ async function checkHealth() {
 }
 
 /**
- * Synchronizes the 10-second live background streaming timer.
+ * Synchronizes the 10-minute live background streaming timer aligned to wall-clock marks (:00, :10, :20...).
  * Automatically active whenever US markets (regular or extended hours) are open and tab is focused.
  */
 function syncLiveStreaming() {
@@ -632,15 +645,15 @@ function syncLiveStreaming() {
       if (currentMarketSession === "pre_market") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10s Pre-Market Live";
+        if (labelSpan) labelSpan.textContent = "10m Pre-Market Sync";
       } else if (currentMarketSession === "after_hours") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-indigo-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10s After-Hours Live";
+        if (labelSpan) labelSpan.textContent = "10m After-Hours Sync";
       } else {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10s Live Sync";
+        if (labelSpan) labelSpan.textContent = "10m Sync (:00, :10...)";
       }
     } else {
       badge.classList.add("hidden");
@@ -650,20 +663,34 @@ function syncLiveStreaming() {
 
   if (shouldStream) {
     if (!liveStreamTimer) {
-      liveStreamTimer = setInterval(triggerLiveRefresh, LIVE_STREAM_INTERVAL_MS);
-      console.log(`[StockCast Live] Started 10s live updates (${currentMarketSession}) for ${currentTicker}`);
+      scheduleNextLiveRefresh();
+      console.log(`[StockCast Live] Scheduled synchronized 10-minute updates for ${currentTicker}`);
     }
   } else {
     if (liveStreamTimer) {
-      clearInterval(liveStreamTimer);
+      clearTimeout(liveStreamTimer);
       liveStreamTimer = null;
       console.log("[StockCast Live] Paused live streaming");
     }
   }
 }
 
+function scheduleNextLiveRefresh() {
+  if (liveStreamTimer) {
+    clearTimeout(liveStreamTimer);
+    liveStreamTimer = null;
+  }
+  const delayMs = getMsUntilNext10MinMark();
+  const nextTarget = new Date(Date.now() + delayMs);
+  console.log(`[StockCast Live] Next 10m price sync in ${Math.round(delayMs / 1000)}s (at ${nextTarget.toLocaleTimeString()})`);
+  liveStreamTimer = setTimeout(() => {
+    triggerLiveRefresh();
+    scheduleNextLiveRefresh();
+  }, delayMs);
+}
+
 /**
- * Periodically called every 10 seconds during open market hours.
+ * Periodically called every 10 minutes at wall-clock boundaries (:00, :10, :20, :30, :40, :50).
  */
 function triggerLiveRefresh() {
   if (!isMarketOpen || document.hidden || isLiveStreamingUpdating || !currentTicker) {
@@ -679,14 +706,11 @@ function initVisibilityListener() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       if (liveStreamTimer) {
-        clearInterval(liveStreamTimer);
+        clearTimeout(liveStreamTimer);
         liveStreamTimer = null;
       }
     } else {
       syncLiveStreaming();
-      if (isMarketOpen && currentTicker) {
-        triggerLiveRefresh();
-      }
     }
   });
 }
@@ -906,6 +930,12 @@ function renderDashboard(data, isLiveUpdate = false) {
 
   const quote = data.quote;
   document.getElementById("current-price").textContent = `$${quote.price.toFixed(2)}`;
+
+  const priceTsElem = document.getElementById("price-timestamp");
+  if (priceTsElem) {
+    const tsStr = data.as_of_formatted || (quote && quote.timestamp_formatted);
+    priceTsElem.textContent = tsStr ? `As of ${tsStr}` : `As of ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
 
   // Extended Session & Live Price Header Labeling
   const sessionLabel = document.getElementById("price-session-label");

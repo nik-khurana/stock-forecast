@@ -16,10 +16,19 @@ This module is the entry point for the Stock Forecast ML backend:
 """
 
 import os
+# Strict resource bounds for 2 CPU / 1000 MB RAM hosting environment (Railway / Hugging Face)
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+
 import re
 import time
+import asyncio
 import logging
 import threading
+import anyio
 from typing import Optional, Literal, Dict, List, Any
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -110,7 +119,7 @@ def get_market_status(simulate_open: bool = False, simulate_session: Optional[st
                 "sub_label": "Pre-market trading (Opens 9:30 AM ET)",
                 "et_time": now_et.strftime("%I:%M %p ET"),
                 "color": "cyan",
-                "polling_interval_seconds": 10,
+                "polling_interval_seconds": 600,
             }
         elif target_session == "after_hours":
             return {
@@ -122,7 +131,7 @@ def get_market_status(simulate_open: bool = False, simulate_session: Optional[st
                 "sub_label": "After-hours trading (Closes 8:00 PM ET)",
                 "et_time": now_et.strftime("%I:%M %p ET"),
                 "color": "indigo",
-                "polling_interval_seconds": 10,
+                "polling_interval_seconds": 600,
             }
         else:
             return {
@@ -131,10 +140,10 @@ def get_market_status(simulate_open: bool = False, simulate_session: Optional[st
                 "is_live": True,
                 "session": "regular",
                 "label": "Market Open (Simulated Live)",
-                "sub_label": "Testing 10s streaming sync",
+                "sub_label": "Synchronized 10m price updates (:00, :10, :20...)",
                 "et_time": now_et.strftime("%I:%M %p ET"),
                 "color": "emerald",
-                "polling_interval_seconds": 10,
+                "polling_interval_seconds": 600,
             }
 
     if weekday >= 5:
@@ -378,32 +387,37 @@ class PortfolioRequest(BaseModel):
     days: int = Field(60, ge=5, le=180, description="Forward forecast horizon in business days (default 60)")
     model: str = Field("ensemble", description="Model choice: ensemble, gbdt, or ridge")
 
+_PORTFOLIO_QUEUE_LOCK = asyncio.Lock()
+
 @app.post("/api/portfolio/forecast")
-def get_portfolio_forecast(req: PortfolioRequest, request: Request):
+async def get_portfolio_forecast(req: PortfolioRequest, request: Request):
     """
     Master Portfolio Forecasting endpoint.
     Computes aggregated 60-day daily Min/Median/Max investment values and 3-year
     monthly trajectory for the user's personal owned holdings.
+    Guarded by _PORTFOLIO_QUEUE_LOCK to process requests sequentially without blowing Railway memory limits.
     """
     client_ip = request.client.host if request.client else "127.0.0.1"
     enforce_rate_limit(client_ip)
 
-    try:
-        holdings_dicts = [h.model_dump() for h in req.holdings]
-        result = forecast_service.generate_portfolio_forecast(
-            holdings=holdings_dicts,
-            n_days=req.days,
-            selected_model=req.model
-        )
-        return result
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
-    except Exception as exc:
-        logger.error("Error generating portfolio forecast: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Portfolio forecasting calculation failed. Please check ticker symbols and try again."
-        )
+    async with _PORTFOLIO_QUEUE_LOCK:
+        try:
+            holdings_dicts = [h.model_dump() for h in req.holdings]
+            result = await anyio.to_thread.run_sync(
+                forecast_service.generate_portfolio_forecast,
+                holdings_dicts,
+                req.days,
+                req.model
+            )
+            return result
+        except ValueError as ve:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+        except Exception as exc:
+            logger.error("Error generating portfolio forecast: %s", exc, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Portfolio forecasting calculation failed. Please check ticker symbols and try again."
+            )
 
 class OptimizeRequest(BaseModel):
     holdings: List[HoldingItem] = Field(..., min_length=1, max_length=50)

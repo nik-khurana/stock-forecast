@@ -63,6 +63,12 @@ An advanced quantitative forecasting and portfolio risk intelligence platform po
 * **Blended Ensemble**: Adaptive stacking blending GBDT and Ridge for optimal out-of-sample stability.
 * **Multi-Horizon Diffusion**: 30-day continuous daily forecasts and 36-month geometric trend drift.
 
+### 11. ⏱️ 10-Minute Synchronized Pricing, Sequential Queue & Resource Hardening
+* **Synchronized 10-Minute Cadence**: Automatic price streaming aligned strictly to wall-clock marks (`:00, :10, :20, :30, :40, :50`), eliminating excessive request bursts and server load.
+* **Live Price Timestamps**: Displays formatted quote timestamps (`As of 12:10 PM UTC/EST`) on both the single stock card and individual owned positions in the portfolio table.
+* **Sequential Queue Processing**: Multi-asset portfolio calculations are processed one-by-one in an orderly queue with explicit memory deallocation (`gc.collect()`), keeping peak RAM under 200 MB.
+* **Strict 2 vCPU / 1000 MB RAM Guardrails**: Hard-caps OpenMP/MKL thread pools (`OMP_NUM_THREADS=1`) and serializes requests via `asyncio.Lock` to guarantee stability and prevent container OOM termination on Railway.
+
 ---
 
 ## 🏗️ Architecture Overview

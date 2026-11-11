@@ -14,11 +14,14 @@ This service serves as the core coordinator between:
 """
 
 import os
+import gc
 import time
 import logging
+import threading
+from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -38,7 +41,11 @@ class ForecastService:
     """
     Orchestrates data fetching, feature engineering, ML fitting,
     30-day daily forecasting, 3-year monthly forecasting, and backtest evaluation.
+    Includes in-memory 10-minute caching and sequential processing to stay strictly
+    within Railway hosting limits (2 CPUs and 1000 MB RAM).
     """
+
+    CACHE_TTL_SEC = 600.0  # 10 minutes (600 seconds)
 
     def __init__(self):
         self.alpaca_client = AlpacaClient()
@@ -46,6 +53,50 @@ class ForecastService:
         self.long_term_model = LongTermMonthlyModel()
         self.backtester = Backtester()
         self.optimizer = PortfolioOptimizer()
+        self._stock_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._cache_lock = threading.Lock()
+
+    @staticmethod
+    def _format_timestamp(ts: Any) -> str:
+        """Helper to format ISO or unix timestamp into friendly time string (e.g. '12:10 PM UTC')."""
+        if not ts:
+            return datetime.now(timezone.utc).strftime("%I:%M %p UTC")
+        try:
+            if isinstance(ts, (int, float)):
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            elif isinstance(ts, str):
+                clean_ts = ts.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_ts)
+            elif isinstance(ts, pd.Timestamp):
+                dt = ts.to_pydatetime()
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                return str(ts)
+            return dt.strftime("%I:%M %p %Z") if dt.tzinfo else dt.strftime("%I:%M %p UTC")
+        except Exception:
+            return str(ts)
+
+    def _get_cached_forecast(self, ticker: str, selected_model: str) -> Optional[Dict[str, Any]]:
+        """Retrieves cached forecast payload if within 10-minute TTL."""
+        cache_key = f"{ticker.upper().strip()}:{selected_model.lower().strip()}"
+        with self._cache_lock:
+            if cache_key in self._stock_cache:
+                timestamp, cached_res = self._stock_cache[cache_key]
+                if (time.time() - timestamp) < self.CACHE_TTL_SEC:
+                    return cached_res
+                else:
+                    self._stock_cache.pop(cache_key, None)
+        return None
+
+    def _set_cached_forecast(self, ticker: str, selected_model: str, result: Dict[str, Any]):
+        """Caches forecast payload and limits memory footprint to max 100 entries."""
+        cache_key = f"{ticker.upper().strip()}:{selected_model.lower().strip()}"
+        with self._cache_lock:
+            if len(self._stock_cache) >= 100:
+                oldest_key = min(self._stock_cache.keys(), key=lambda k: self._stock_cache[k][0])
+                self._stock_cache.pop(oldest_key, None)
+            self._stock_cache[cache_key] = (time.time(), result)
 
     @staticmethod
     def compute_earnings_catalyst(ticker: str, last_date: pd.Timestamp) -> Dict[str, Any]:
@@ -96,6 +147,12 @@ class ForecastService:
         """
         ticker = ticker.upper().strip()
         t0 = time.time()
+
+        # Check 10-minute cache before computing
+        cached_result = self._get_cached_forecast(ticker, selected_model)
+        if cached_result and "forecast_30d" in cached_result:
+            logger.info("Serving 10-minute cached forecast for %s (%s)", ticker, selected_model)
+            return cached_result
 
         # -------------------------------------------------------------
         # STEP 1: Ingest 3 Years of Daily Bars & Latest Quote Concurrently
@@ -194,12 +251,20 @@ class ForecastService:
 
         execution_time_ms = round((time.time() - t0) * 1000, 1)
 
-        return {
+        now_utc = datetime.now(timezone.utc)
+        as_of_formatted = now_utc.strftime("%b %d, %Y %I:%M %p UTC")
+        if isinstance(quote, dict):
+            quote["timestamp_formatted"] = self._format_timestamp(quote.get("timestamp"))
+
+        result = {
             "ticker": ticker,
             "company_name": get_company_name(ticker),
             "sector": get_company_sector(ticker),
             "data_source": data_source,
             "quote": quote,
+            "as_of_timestamp": time.time(),
+            "as_of_formatted": as_of_formatted,
+            "as_of_iso": now_utc.isoformat(),
             "execution_time_ms": execution_time_ms,
             "technical_indicators": tech_indicators,
             "news_sentiment": SentimentService.evaluate_news_sentiment(ticker),
@@ -225,6 +290,15 @@ class ForecastService:
             },
             "forecast_3y_monthly": monthly_res,
         }
+
+        self._set_cached_forecast(ticker, selected_model, result)
+        try:
+            del feat_df, gbdt, ridge
+        except Exception:
+            pass
+        gc.collect()
+
+        return result
 
     def compute_model_recommendation(
         self,
@@ -432,100 +506,100 @@ class ForecastService:
 
         unique_tickers = [h["ticker"] for h in normalized_holdings]
 
-        # Step 2: Concurrently fetch stock bundles (3Y daily bars + latest live quote)
-        bundles: Dict[str, Any] = {}
-        warnings: List[str] = []
-
-        def _fetch_bundle(tk: str):
-            try:
-                bundle = self.alpaca_client.get_stock_bundle(tk, years=3)
-                return tk, bundle, None
-            except Exception as e:
-                return tk, None, str(e)
-
-        with ThreadPoolExecutor(max_workers=min(len(unique_tickers), 8)) as executor:
-            for tk, bundle, err in executor.map(_fetch_bundle, unique_tickers):
-                if err or not bundle or bundle.get("bars_df") is None or bundle["bars_df"].empty:
-                    msg = f"Symbol '{tk}': {err or 'No historical bars returned from market data feed.'}"
-                    logger.warning("Portfolio bundle fetch error: %s", msg)
-                    warnings.append(msg)
-                else:
-                    bundles[tk] = bundle
-
-        # Step 3: Run ML models concurrently for each valid holding
+        # Step 2 & 3: Sequential Queue Processing (one-by-one) with 10-minute caching & explicit memory cleanup
+        # Keeps peak memory well under 500 MB and CPU under 1 vCPU, preventing Railway container OOM crashes.
         stock_daily_forecasts: Dict[str, List[Dict[str, Any]]] = {}
         stock_monthly_forecasts: Dict[str, List[Dict[str, Any]]] = {}
         stock_support_floors: Dict[str, float] = {}
         stock_monthly_support_floors: Dict[str, float] = {}
         current_quotes: Dict[str, Any] = {}
+        bars_dict: Dict[str, Any] = {}
         valid_holdings: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
-        def _train_holding_models(h: Dict[str, Any]):
+        for h in normalized_holdings:
             tk = h["ticker"]
-            if tk not in bundles:
-                return None
-            b = bundles[tk]
-            bars_df = b.get("bars_df")
-            quote = b.get("quote")
-
-            if bars_df is None or bars_df.empty or not quote:
-                return {"warning": f"Symbol '{tk}': Insufficient price history to generate ML forecast."}
-
             try:
-                current_price = quote["price"]
-                last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
-
-                feat_df, feature_cols = self.feature_builder.build_features(bars_df)
-
-                gbdt = GBDTModel()
-                gbdt_res = gbdt.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
-
-                ridge = RidgeModel(alpha=2.5)
-                ridge_res = ridge.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
-
-                ensemble_res = EnsembleModel.blend(gbdt_res, ridge_res)
-
-                if selected_model == "gbdt":
-                    chosen = gbdt_res
-                elif selected_model == "ridge":
-                    chosen = ridge_res
+                # 1. Check in-memory 10-minute cache first
+                cached = self._get_cached_forecast(tk, selected_model)
+                if cached and "bars_df" in cached and "quote" in cached:
+                    quote = cached["quote"]
+                    bars_df = cached["bars_df"]
+                    chosen_daily = cached["daily_forecast"]
+                    m_forecast = cached["monthly_forecast"]
+                    sup_floor = cached["critical_support_floor"]
+                    m_sup_floor = cached["monthly_support_floor"]
                 else:
-                    chosen = ensemble_res
+                    # 2. Sequential fetch and model training
+                    bundle = self.alpaca_client.get_stock_bundle(tk, years=3)
+                    bars_df = bundle.get("bars_df")
+                    quote = bundle.get("quote")
 
-                m_res = self.long_term_model.predict_36_months(bars_df, current_price, last_date)
-                sup_res = self.compute_support_levels(bars_df, current_price, chosen["daily_forecast"], m_res["monthly_forecast"])
+                    if bars_df is None or bars_df.empty or not quote:
+                        msg = f"Symbol '{tk}': Insufficient price history to generate ML forecast."
+                        logger.warning(msg)
+                        warnings.append(msg)
+                        continue
 
-                return {
-                    "holding": h,
-                    "ticker": tk,
-                    "quote": quote,
-                    "daily_forecast": chosen["daily_forecast"],
-                    "monthly_forecast": m_res["monthly_forecast"],
-                    "support_floor": sup_res["critical_support_floor"],
-                    "monthly_support_floor": sup_res["monthly_support_floor"],
-                }
+                    current_price = quote["price"]
+                    last_date = pd.to_datetime(bars_df["timestamp"].iloc[-1])
+
+                    feat_df, feature_cols = self.feature_builder.build_features(bars_df)
+
+                    gbdt = GBDTModel()
+                    gbdt_res = gbdt.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
+
+                    ridge = RidgeModel(alpha=2.5)
+                    ridge_res = ridge.fit_and_predict(feat_df, feature_cols, current_price, last_date, n_days=n_days)
+
+                    ensemble_res = EnsembleModel.blend(gbdt_res, ridge_res)
+
+                    if selected_model == "gbdt":
+                        chosen = gbdt_res
+                    elif selected_model == "ridge":
+                        chosen = ridge_res
+                    else:
+                        chosen = ensemble_res
+
+                    m_res = self.long_term_model.predict_36_months(bars_df, current_price, last_date)
+                    sup_res = self.compute_support_levels(bars_df, current_price, chosen["daily_forecast"], m_res["monthly_forecast"])
+
+                    chosen_daily = chosen["daily_forecast"]
+                    m_forecast = m_res["monthly_forecast"]
+                    sup_floor = sup_res["critical_support_floor"]
+                    m_sup_floor = sup_res["monthly_support_floor"]
+
+                    if isinstance(quote, dict):
+                        quote["timestamp_formatted"] = self._format_timestamp(quote.get("timestamp"))
+
+                    # Cache holding results for 10 minutes
+                    self._set_cached_forecast(tk, selected_model, {
+                        "bars_df": bars_df,
+                        "quote": quote,
+                        "daily_forecast": chosen_daily,
+                        "monthly_forecast": m_forecast,
+                        "critical_support_floor": sup_floor,
+                        "monthly_support_floor": m_sup_floor,
+                    })
+
+                    try:
+                        del feat_df, gbdt, ridge
+                    except Exception:
+                        pass
+                    gc.collect()
+
+                bars_dict[tk] = bars_df
+                stock_daily_forecasts[tk] = chosen_daily
+                stock_monthly_forecasts[tk] = m_forecast
+                stock_support_floors[tk] = sup_floor
+                stock_monthly_support_floors[tk] = m_sup_floor
+                current_quotes[tk] = quote
+                valid_holdings.append(h)
+
             except Exception as e:
-                logger.error("Error generating forecast for holding %s: %s", tk, e, exc_info=True)
-                return {"warning": f"Symbol '{tk}': Model training failed ({str(e)})"}
-
-        # Train models in parallel (max workers configurable via env, defaults to 2 to stay well within RAM limits)
-        max_allowed = int(os.getenv("MAX_ML_WORKERS", "2"))
-        worker_count = max(1, min(len(normalized_holdings), max_allowed))
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            for outcome in executor.map(_train_holding_models, normalized_holdings):
-                if not outcome:
-                    continue
-                if "warning" in outcome:
-                    warnings.append(outcome["warning"])
-                    continue
-
-                tk = outcome["ticker"]
-                stock_daily_forecasts[tk] = outcome["daily_forecast"]
-                stock_monthly_forecasts[tk] = outcome["monthly_forecast"]
-                stock_support_floors[tk] = outcome["support_floor"]
-                stock_monthly_support_floors[tk] = outcome["monthly_support_floor"]
-                current_quotes[tk] = outcome["quote"]
-                valid_holdings.append(outcome["holding"])
+                logger.error("Error processing portfolio holding %s: %s", tk, e, exc_info=True)
+                warnings.append(f"Symbol '{tk}': Model training failed ({str(e)})")
+                gc.collect()
 
         if not valid_holdings:
             err_detail = "; ".join(warnings) if warnings else "No valid stock positions could be processed."
@@ -551,6 +625,10 @@ class ForecastService:
             end_p_3y = stock_monthly_forecasts[tk][-1]["mean"]
             ret_3y_pct = round(((end_p_3y - curr_p) / curr_p) * 100, 2)
 
+            q = current_quotes.get(tk, {})
+            q_ts = q.get("timestamp")
+            q_ts_fmt = q.get("timestamp_formatted") or self._format_timestamp(q_ts)
+
             holdings_breakdown.append({
                 "ticker": tk,
                 "company_name": h["company_name"],
@@ -560,6 +638,8 @@ class ForecastService:
                 "cost_basis": h["cost_basis"],
                 "current_price": round(curr_p, 2),
                 "current_value": curr_val,
+                "quote_timestamp": q_ts,
+                "quote_timestamp_formatted": q_ts_fmt,
                 "support_floor": stock_support_floors.get(tk, round(curr_p * 0.9, 2)),
                 "pnl": pnl,
                 "pnl_pct": pnl_pct,
@@ -725,7 +805,11 @@ class ForecastService:
 
         # Step 8: Modern Portfolio Theory Optimization & Macro Stress-Testing
         try:
-            optimization_results = self.optimizer.optimize_portfolio(holdings_breakdown, risk_profile="balanced")
+            optimization_results = self.optimizer.optimize_portfolio(
+                holdings_breakdown,
+                risk_profile="balanced",
+                historical_bars_dict=bars_dict
+            )
         except Exception as opt_err:
             logger.warning("Optimization calculation error: %s", opt_err)
             optimization_results = None
@@ -737,6 +821,11 @@ class ForecastService:
 
         execution_time_ms = round((time.time() - t0) * 1000, 1)
 
+        now_utc = datetime.now(timezone.utc)
+        as_of_formatted = now_utc.strftime("%b %d, %Y %I:%M %p UTC")
+
+        gc.collect()
+
         return {
             "total_cost_basis": total_cost_basis,
             "current_portfolio_value": current_portfolio_value,
@@ -744,6 +833,9 @@ class ForecastService:
             "total_unrealized_pnl_pct": total_pnl_pct,
             "num_holdings": len(holdings_breakdown),
             "selected_model": selected_model,
+            "as_of_timestamp": time.time(),
+            "as_of_formatted": as_of_formatted,
+            "as_of_iso": now_utc.isoformat(),
             "execution_time_ms": execution_time_ms,
             "warnings": warnings,
             "support_levels": portfolio_support_summary,
