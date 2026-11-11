@@ -32,6 +32,9 @@
 
   function getActivePageContext() {
     const isPortfolio = window.location.pathname.includes("portfolio") || !!document.getElementById("portfolio-holdings-tbody");
+    const now = new Date();
+    const currentDateStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const currentYear = now.getFullYear();
     
     if (isPortfolio) {
       let currentEquity = 0;
@@ -41,9 +44,40 @@
         currentEquity = portfolioForecastData.current_portfolio_value || portfolioForecastData.total_cost_basis || 0;
       }
 
-      const holdings = (typeof portfolioHoldings !== "undefined" && Array.isArray(portfolioHoldings))
+      const rawHoldings = (typeof portfolioHoldings !== "undefined" && Array.isArray(portfolioHoldings))
         ? portfolioHoldings
         : [];
+
+      // Enrich holdings with live market prices, values, and PnL breakdown
+      const enrichedHoldings = rawHoldings.map((h) => {
+        let currentPrice = h.buy_price || 0;
+        let currentValue = (h.shares || 0) * currentPrice;
+        let pnlPct = 0;
+        let weightPct = 0;
+
+        if (typeof portfolioForecastData !== "undefined" && portfolioForecastData?.holdings_breakdown) {
+          const match = portfolioForecastData.holdings_breakdown.find((item) => item.ticker === h.ticker);
+          if (match) {
+            if (typeof match.current_price === "number") currentPrice = match.current_price;
+            if (typeof match.current_value === "number") currentValue = match.current_value;
+            if (typeof match.pnl_pct === "number") pnlPct = match.pnl_pct;
+            else if (typeof match.unrealized_pnl_pct === "number") pnlPct = match.unrealized_pnl_pct;
+            if (typeof match.weight_pct === "number") weightPct = match.weight_pct;
+            else if (typeof match.weight === "number") weightPct = match.weight;
+          }
+        }
+
+        return {
+          ticker: h.ticker,
+          shares: h.shares,
+          buy_price: h.buy_price,
+          current_price: currentPrice,
+          current_value: currentValue,
+          pnl_pct: pnlPct,
+          weight_pct: weightPct
+        };
+      });
+
       const cagr = (typeof portfolioForecastData !== "undefined" && portfolioForecastData?.portfolio_3y_summary?.cagr_3y_pct) || 0;
       const roi60d = (typeof portfolioForecastData !== "undefined" && portfolioForecastData?.portfolio_60d_summary?.expected_roi_pct) || 0;
       const mTarget = (typeof milestoneTarget !== "undefined") ? milestoneTarget : 50000;
@@ -52,7 +86,9 @@
 
       return {
         page: "portfolio",
-        holdings: holdings,
+        current_date: currentDateStr,
+        current_year: currentYear,
+        holdings: enrichedHoldings,
         current_portfolio_value: currentEquity,
         cagr_3y_pct: cagr,
         expected_roi_60d_pct: roi60d,
@@ -86,6 +122,8 @@
 
       return {
         page: "single_stock",
+        current_date: currentDateStr,
+        current_year: currentYear,
         ticker: ticker,
         price: price,
         support_floor: supFloor,

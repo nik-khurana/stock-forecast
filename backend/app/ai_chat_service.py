@@ -37,10 +37,13 @@ class AIChatService:
 
     def sanitize_context_for_privacy(self, context: Dict[str, Any], anonymize: bool = True) -> str:
         """
-        Formats page context into a compact, token-efficient system brief for the LLM.
-        Drastically minimizes prompt tokens to avoid exceeding Free-Tier Tokens-Per-Minute (TPM) limits.
+        Formats page context into an accurate, token-efficient system brief for the LLM.
+        Explicitly distinguishes between live Current Market Price and historical cost basis (buy price),
+        and anchors all dates to the current calendar date/year.
         """
         page = context.get("page", "single_stock")
+        current_date = context.get("current_date") or time.strftime("%b %d, %Y")
+        current_year = context.get("current_year") or time.strftime("%Y")
         
         if page == "portfolio":
             holdings = context.get("holdings", [])
@@ -51,32 +54,49 @@ class AIChatService:
             milestone_date = context.get("milestone_projected_date", "Calculating...")
             
             if anonymize:
-                # High-density token-optimized brief (percentage weights only)
+                # Privacy-preserving normalized percentage weights with relative return vs cost basis
                 holdings_summary = []
                 for h in holdings[:10]:
                     tk = str(h.get("ticker", "ASSET")).upper()
                     sh = float(h.get("shares", 0))
-                    bp = float(h.get("buy_price", 0))
-                    val = sh * bp
-                    weight = round((val / total_val * 100) if total_val > 0 else 0, 1)
-                    holdings_summary.append(f"{tk}:{weight}%")
+                    curr_p = float(h.get("current_price", h.get("buy_price", 0)))
+                    buy_p = float(h.get("buy_price", 0))
+                    val = float(h.get("current_value", sh * curr_p))
+                    weight = round(float(h.get("weight_pct", (val / total_val * 100) if total_val > 0 else 0)), 1)
+                    pnl_pct = round(float(h.get("pnl_pct", (((curr_p - buy_p) / buy_p * 100) if buy_p > 0 else 0))), 1)
+                    holdings_summary.append(f"{tk} ({weight}% weight, trading at current market price, {pnl_pct:+.1f}% vs cost basis)")
                 
                 target_multiple = round(milestone_target / total_val, 2) if total_val > 0 else 1.0
                 progress_pct = round((total_val / milestone_target * 100) if milestone_target > 0 else 0, 1)
                 
                 return (
+                    f"CURRENT CALENDAR DATE: {current_date} (Year {current_year})\n"
                     f"PORTFOLIO (ANONYMIZED):\n"
-                    f"Holdings ({len(holdings)}): {', '.join(holdings_summary) if holdings_summary else 'None'}\n"
-                    f"60D ROI: {roi_60d:+.2f}% | 3Y CAGR: {cagr:+.2f}%\n"
-                    f"Milestone: {target_multiple}x target ({progress_pct}% met, Date: {milestone_date})"
+                    f"Positions: {', '.join(holdings_summary) if holdings_summary else 'No active holdings'}\n"
+                    f"60-Day Expected Return: {roi_60d:+.2f}% | 3-Year Projected CAGR: {cagr:+.2f}%\n"
+                    f"Milestone Goal: {target_multiple}x current equity ({progress_pct}% achieved so far, Projected Hit Date: {milestone_date})"
                 )
             else:
-                holdings_str = ", ".join([f"{h.get('shares')} {h.get('ticker')}@${h.get('buy_price')}" for h in holdings[:10]])
+                holdings_summary = []
+                for h in holdings[:10]:
+                    tk = str(h.get("ticker", "ASSET")).upper()
+                    sh = float(h.get("shares", 0))
+                    curr_p = float(h.get("current_price", h.get("buy_price", 0)))
+                    buy_p = float(h.get("buy_price", 0))
+                    val = float(h.get("current_value", sh * curr_p))
+                    pnl_pct = round(float(h.get("pnl_pct", (((curr_p - buy_p) / buy_p * 100) if buy_p > 0 else 0))), 1)
+                    holdings_summary.append(
+                        f"{sh:g} {tk} @ CURRENT MARKET PRICE ${curr_p:.2f} (Total: ${val:,.2f}, avg buy price: ${buy_p:.2f}, {pnl_pct:+.1f}% gain/loss)"
+                    )
+                
+                progress_pct = round((total_val / milestone_target * 100) if milestone_target > 0 else 0, 1)
                 return (
+                    f"CURRENT CALENDAR DATE: {current_date} (Year {current_year})\n"
                     f"PORTFOLIO (FULL):\n"
-                    f"Equity: ${total_val:,.2f} | Positions: {holdings_str}\n"
-                    f"60D ROI: {roi_60d:+.2f}% | 3Y CAGR: {cagr:+.2f}%\n"
-                    f"Milestone: ${milestone_target:,.2f} (Date: {milestone_date})"
+                    f"Current Total Equity (At Live Current Market Prices): ${total_val:,.2f}\n"
+                    f"Positions:\n" + "\n".join([f"- {item}" for item in holdings_summary]) + "\n"
+                    f"60-Day Expected Return: {roi_60d:+.2f}% | 3-Year Projected Compound CAGR: {cagr:+.2f}%\n"
+                    f"Milestone Goal: ${milestone_target:,.2f} ({progress_pct}% achieved so far, Projected Hit Date: {milestone_date})"
                 )
         else:
             ticker = str(context.get("ticker", "STOCK")).upper()
@@ -91,8 +111,9 @@ class AIChatService:
             y3_target = float(context.get("forecast_3y_target", 0.0))
             
             return (
-                f"STOCK {ticker}: Price ${price:.2f} | 30D: ${d_min:.2f}-${d_max:.2f} (Exp ${d_mean:.2f}) | "
-                f"3Y Target ${y3_target:.2f} | 99% Support Floor ${sup_floor:.2f} (+{cushion_pct:.1f}%) | "
+                f"CURRENT CALENDAR DATE: {current_date} (Year {current_year})\n"
+                f"STOCK {ticker}: Current Live Market Price ${price:.2f} | 30D Forecast: ${d_min:.2f}-${d_max:.2f} (Expected Mean ${d_mean:.2f}) | "
+                f"3-Year Target ${y3_target:.2f} | 99% Support Floor ${sup_floor:.2f} (+{cushion_pct:.1f}% safety cushion) | "
                 f"News Sentiment: {sentiment_score:+.1f} ({sentiment_class})"
             )
 
@@ -110,10 +131,22 @@ class AIChatService:
         """
         sanitized_context = self.sanitize_context_for_privacy(context, anonymize=anonymize)
         
+        current_date = context.get("current_date") or time.strftime("%b %d, %Y")
+        current_year = context.get("current_year") or time.strftime("%Y")
+
         system_instruction = (
-            "You are StockCast AI, an institutional quantitative financial analyst and personal wealth strategist. "
-            "Provide concise, data-driven answers in Markdown. Explain probability, support floors, CAGR, "
-            "and volatility. ML forecasts are probabilistic estimates, not financial advice."
+            f"You are StockCast AI, an elite personal wealth strategist and quantitative financial copilot. "
+            f"You communicate like a sharp, encouraging, and witty Wall Street wealth advisor having a high-value conversation with a client—warm, human, and insightful, NOT a dry textbook or fragmented bullet checklist.\n\n"
+            f"TEMPORAL ANCHOR: Today is {current_date} (Current Calendar Year: {current_year}). All dates, horizons, "
+            f"and milestone countdowns MUST be calculated relative to {current_year} (NEVER assume 2024 or earlier).\n\n"
+            f"CRITICAL PRICING RULE: Always evaluate asset valuations, net worth, and target milestones using CURRENT MARKET PRICE. "
+            f"The 'buy price' or cost basis is strictly historical for profit/loss history—it is NOT what the stock trades at today!\n\n"
+            f"RESPONSE STYLE GUIDELINES:\n"
+            f"1. Conversational & Cohesive: Give a smooth, human response in 2-3 flowing paragraphs (approx. 120-160 words). Avoid spreading answers into dozens of small fragmented bullet headers.\n"
+            f"2. Direct Bottom-Line First: Answer the user's specific question directly in the very first sentence with bold numbers (e.g., target date, equity, CAGR).\n"
+            f"3. Narrative Synthesis: Weave together current valuation, compound growth (CAGR), 60-day momentum, and asset weights into a compelling narrative summary.\n"
+            f"4. Actionable Takeaway: Conclude with a helpful, realistic tip (e.g., DCA pace, rebalancing concentration risk, or support floor defense). "
+            f"Subtly remind the client that forecasts reflect statistical expected trajectories, not guaranteed financial advice."
         )
 
         # Sanitize custom key
@@ -306,8 +339,8 @@ class AIChatService:
                         {"role": "system", "content": f"{system_prompt}\n\nContext:\n{context_str}"},
                         {"role": "user", "content": message}
                     ],
-                    "temperature": 0.35,
-                    "max_tokens": 450  # Compact token ceiling to prevent exhausting 8,000 TPM limit
+                    "temperature": 0.45,
+                    "max_tokens": 600  # Token ceiling allowing comprehensive ~150 word cohesive answers
                 }
                 resp = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
                 if resp.status_code == 200:
@@ -414,9 +447,11 @@ class AIChatService:
         """
         Built-in deterministic institutional analysis engine that dynamically reasons
         across the active models, forecasts, and support metrics without requiring an external API key.
+        Formatted as an engaging, cohesive conversation summary.
         """
         q = message.lower().strip()
         page = context.get("page", "single_stock")
+        current_year = context.get("current_year") or time.strftime("%Y")
         
         if page == "portfolio":
             cagr = float(context.get("cagr_3y_pct", 0.0))
@@ -427,67 +462,53 @@ class AIChatService:
             total_val = float(context.get("current_portfolio_value", 0.0) or context.get("total_cost_basis", 0.0))
             
             # 1. Milestone / Goal Tracking Queries
-            if any(k in q for k in ("milestone", "goal", "target", "when", "reach", "hit", "date")):
+            if any(k in q for k in ("milestone", "goal", "target", "when", "reach", "hit", "date", "100k", "50k", "networth", "net worth")):
                 if total_val <= 0 or not holdings:
                     return (
-                        "### 🎯 Financial Milestone Analysis\n\n"
-                        "Your portfolio currently has no active stock positions loaded. "
-                        "To calculate your projected milestone completion date:\n\n"
-                        "1. **Add your active positions** in the form above (e.g., `AAPL`, `NVDA`, `MSFT`, or pre-IPO `ANT`).\n"
-                        "2. The Quantile Engine will model 36-month volatility diffusion and determine the exact target month.\n\n"
-                        "> **Pro-Tip**: You can load our pre-built diversified sample portfolio by clicking **'Load Sample Portfolio'**."
+                        "You don't have any active positions loaded in your portfolio just yet! "
+                        "To calculate your projected milestone completion date, simply add a few stocks above (like `AAPL`, `NVDA`, or `MSFT`), "
+                        "or click **'Load Sample Portfolio'** to test drive the multi-asset machine learning forecast."
                     )
                 
                 if total_val >= milestone_target:
+                    target_display = f"${milestone_target:,.2f}" if not anonymize else "target"
+                    equity_display = f"${total_val:,.2f}" if not anonymize else "current equity"
                     return (
-                        f"### 🏆 Milestone Goal Already Achieved!\n\n"
-                        f"- **Current Portfolio Equity**: {'[Anonymized Baseline]' if anonymize else f'${total_val:,.2f}'}\n"
-                        f"- **Target Milestone**: {'[Target Met]' if anonymize else f'${milestone_target:,.2f}'}\n\n"
-                        f"Your portfolio has already surpassed this wealth target! "
-                        f"Consider increasing your target milestone using the quick preset buttons (**$100K**, **$250K**, or **$1M 🚀**) "
-                        f"to project your next capital compounding horizon."
+                        f"Congratulations—you have already crossed your {target_display} milestone! 🎉\n\n"
+                        f"Your portfolio is currently valued at **{equity_display}** at live market prices. "
+                        f"With a **{cagr:+.2f}% 3-year projected CAGR**, your capital is compounding with great momentum. "
+                        f"Consider bumping your milestone goal up to **$100K**, **$250K**, or **$1M** using the quick preset pills to map out your next compounding horizon."
                     )
 
                 progress_pct = (total_val / milestone_target * 100) if milestone_target > 0 else 0
+                target_str = f"${milestone_target:,.2f}" if not anonymize else "your target milestone"
                 return (
-                    f"### 🎯 Financial Milestone Trajectory Report\n\n"
-                    f"- **Projected Hit Date**: **{milestone_date}** *(Expected Mean Trajectory)*\n"
-                    f"- **Current Progress**: **{progress_pct:.1f}%** towards milestone\n"
-                    f"- **Projected 3-Year CAGR**: **{cagr:+.2f}% annual compound growth (Mean Path)**\n"
-                    f"- **Short-Term Horizon**: **{roi_60d:+.2f}% 60-day projected return**\n\n"
-                    f"#### 📈 Strategic Acceleration Recommendations:\n"
-                    f"1. **Dollar-Cost Averaging (DCA)**: Periodic monthly additions can accelerate your target date by up to 35%.\n"
-                    f"2. **Rebalance Volatility**: Reallocating underperforming positions into high-Sharpe growth anchors preserves compounding momentum.\n\n"
-                    f"*Note: Probabilistic estimate strictly based on expected mean price trajectory (not upper max envelope).*"
+                    f"Based on your current trajectory, you are on track to hit {target_str} by **{milestone_date}**, "
+                    f"evaluated strictly along the machine learning model's expected mean price path.\n\n"
+                    f"You have already captured **{progress_pct:.1f}%** of your target with a healthy **{cagr:+.2f}% 3-year projected CAGR** "
+                    f"and **{roi_60d:+.2f}% expected momentum** over the next 60 days. Your holdings at current market prices provide a balanced foundation for compounding.\n\n"
+                    f"**Strategic Takeaway**: Regular monthly contributions (dollar-cost averaging) combined with rebalancing any concentrated laggards can pull your milestone date forward by several months."
                 )
 
             # 2. 3-Year Outlook & Future Trajectory
             if any(k in q for k in ("future", "outlook", "3 year", "long term", "growth", "forecast", "cagr")):
                 return (
-                    f"### 🔮 3-Year Multi-Year Portfolio Growth Outlook\n\n"
-                    f"- **Aggregate Projected CAGR**: **{cagr:+.2f}% per year**\n"
-                    f"- **60-Day Near-Term Momentum**: **{roi_60d:+.2f}%**\n"
-                    f"- **Active Holdings Modeled**: **{len(holdings)} positions**\n\n"
-                    f"#### 📊 Trajectory Assessment:\n"
-                    f"- The machine learning model forecasts a **{('steady upward drift' if cagr > 8 else 'moderate capital preservation')}** path.\n"
-                    f"- The quantile spread indicates volatility bands expand over 36 months, meaning downside floor defense is critical during macro pullbacks.\n\n"
-                    f"> Review the **3-Year Multi-Month Horizon Forecast table** below for specific month-by-month minimum and maximum expected envelopes."
+                    f"Over the next 3 years, your portfolio is projected to compound at an aggregate **{cagr:+.2f}% annual CAGR**, "
+                    f"supported by near-term 60-day momentum tracking at **{roi_60d:+.2f}%**.\n\n"
+                    f"Across your {len(holdings)} holdings evaluated at live market prices, the machine learning models forecast a "
+                    f"{'steady upward drift' if cagr > 8 else 'conservative capital preservation trajectory'}. "
+                    f"While 36-month quantile volatility bands widen over time, your current asset allocation maintains positive expected value.\n\n"
+                    f"**Strategic Takeaway**: Check the 3-Year Forecast breakdown below to monitor critical support envelopes as macro cycles evolve."
                 )
 
             # 3. Default Portfolio Overview
             return (
-                f"### 💼 StockCast Portfolio Intelligence Summary\n\n"
-                f"- **Active Positions**: {len(holdings)} holdings modeled\n"
-                f"- **60-Day Expected Return**: **{roi_60d:+.2f}%**\n"
-                f"- **3-Year Compound CAGR**: **{cagr:+.2f}%**\n"
-                f"- **Goal Milestone**: Target is projected for **{milestone_date}**\n\n"
-                f"You can ask me questions like:\n"
-                f"- *'Will I hit my milestone on time?'*\n"
-                f"- *'What is the 3-year outlook for my investments?'*\n"
-                f"- *'How can I improve portfolio diversification?'*\n\n"
-                f"---\n"
-                f"*💡 Connect a free API key from [Google AI Studio](https://aistudio.google.com) (`GEMINI_API_KEY`) "
-                f"or [Groq](https://console.groq.com) (`GROQ_API_KEY`) in your `.env` for unrestricted open-ended conversational depth.*"
+                f"Your portfolio across {len(holdings)} holdings is currently tracking a **{cagr:+.2f}% 3-year compound CAGR**, "
+                f"with 60-day near-term momentum expected at **{roi_60d:+.2f}%** and your primary milestone projected for **{milestone_date}**.\n\n"
+                f"Everything is measured at live market prices with your historical cost basis tracked for net gains. Feel free to ask me:\n"
+                f"- *'When will I hit my next milestone?'*\n"
+                f"- *'What is the 3-year outlook for my tech allocation?'*\n"
+                f"- *'How can I improve portfolio diversification and risk?'*"
             )
 
         else:
@@ -507,33 +528,26 @@ class AIChatService:
             # Sentiment question
             if any(k in q for k in ("sentiment", "news", "bullish", "bearish", "wire")):
                 return (
-                    f"### 📰 Real-Time Sentiment Analysis for ${ticker}\n\n"
-                    f"- **Current NLP Score**: **{sentiment_score:+.1f}** on a scale of -100 to +100\n"
-                    f"- **Classification**: **{sentiment_class}**\n\n"
-                    f"Media sentiment reflects institutional headlines and wire flow from Alpaca breaking feeds. "
-                    f"A score above +15 signifies institutional accumulation momentum, while below -15 indicates macro or sector headwinds."
+                    f"Institutional news sentiment for **${ticker}** is currently registered at **{sentiment_score:+.1f}** ({sentiment_class}).\n\n"
+                    f"{'Breaking headlines and financial wire flow indicate solid institutional accumulation interest.' if sentiment_score > 10 else 'Media wire flow reflects a cautious, risk-balanced tone amid macro sector crosscurrents.'} "
+                    f"At a current price of **${price:.2f}**, sentiment aligns constructively with the 30-day expected mean target of **${d_mean:.2f}**."
                 )
 
             # Support floor question
             if any(k in q for k in ("support", "floor", "downside", "crash", "stop loss", "risk")):
                 return (
-                    f"### 🛡️ Critical Downside Support Floor Analysis (${ticker})\n\n"
-                    f"- **99% Critical Support Floor**: **${sup_floor:.2f}**\n"
-                    f"- **Downside Cushion**: **+{cushion_pct:.1f}%** buffer above support\n"
-                    f"- **Current Trading Price**: **${price:.2f}**\n\n"
-                    f"The support floor represents an empirical 99% confidence boundary. If ${ticker} breaches ${sup_floor:.2f}, "
-                    f"it indicates structural trend breakdown and triggers defensive rebalancing alerts."
+                    f"The critical 99% downside support floor for **${ticker}** sits firmly at **${sup_floor:.2f}**, "
+                    f"giving you a **+{cushion_pct:.1f}% safety buffer** above institutional breakdown levels.\n\n"
+                    f"With ${ticker} currently trading at **${price:.2f}**, this support level acts as a strong statistical margin of safety. "
+                    f"A confirmed close below ${sup_floor:.2f} would trigger defensive rebalancing alerts."
                 )
 
             # Outlook / 30-day forecast question
             return (
-                f"### 🤖 StockCast ML Quantitative Brief for ${ticker}\n\n"
-                f"- **Live Price**: **${price:.2f}**\n"
-                f"- **30-Day Mean Target**: **${d_mean:.2f}** ({roi_30d:+.2f}% expected return)\n"
-                f"- **3-Year Multi-Year Horizon**: **${y3_target:.2f}** ({roi_3y:+.2f}% long-term drift)\n"
-                f"- **Technical Floor Defense**: **${sup_floor:.2f}** (+{cushion_pct:.1f}% cushion)\n"
-                f"- **Market News Sentiment**: **{sentiment_score:+.1f}** ({sentiment_class})\n\n"
-                f"The Blended Ensemble model stacks Quantile Gradient Boosted Trees and Regularized Ridge regression to predict volatility envelopes."
+                f"**${ticker}** is currently trading at **${price:.2f}**, with machine learning models projecting a 30-day mean target of **${d_mean:.2f}** ({roi_30d:+.2f}% expected return) "
+                f"and an extended 3-year horizon target of **${y3_target:.2f}** ({roi_3y:+.2f}% long-term drift).\n\n"
+                f"Your downside is protected by a 99% support floor at **${sup_floor:.2f}** (+{cushion_pct:.1f}% cushion), "
+                f"while live media sentiment is **{sentiment_class}** ({sentiment_score:+.1f}). Overall, the blended quantile models show an attractive risk-reward profile."
             )
 
 ai_chat_service = AIChatService()

@@ -2541,16 +2541,16 @@ async function checkPortfolioMarketStatus() {
         pill.title = ms.sub_label || ms.label;
         if (ms.session === "regular") {
           dot.className = "w-2 h-2 rounded-full bg-emerald-500 market-pulse-emerald";
-          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md";
+          pill.className = "hidden 2xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md";
         } else if (ms.session === "pre_market") {
           dot.className = "w-2 h-2 rounded-full bg-cyan-400 market-pulse-cyan";
-          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 backdrop-blur-md";
+          pill.className = "hidden 2xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 backdrop-blur-md";
         } else if (ms.session === "after_hours") {
           dot.className = "w-2 h-2 rounded-full bg-indigo-400 market-pulse-indigo";
-          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 backdrop-blur-md";
+          pill.className = "hidden 2xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 backdrop-blur-md";
         } else {
           dot.className = "w-2 h-2 rounded-full bg-amber-500 market-pulse-amber";
-          pill.className = "hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
+          pill.className = "hidden 2xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 backdrop-blur-md";
         }
       }
     }

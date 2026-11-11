@@ -40,29 +40,30 @@
 <body class="antialiased min-h-screen">
 
   <!-- Top Apple Glass Navigation Header -->
-  <header class="sticky top-0 z-40 w-full apple-glass border-b border-black/[0.06] dark:border-white/[0.08]">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+  <header class="sticky top-0 z-50 w-full apple-glass border-b border-black/[0.06] dark:border-white/[0.08] backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2.5 flex flex-wrap items-center justify-between gap-y-2 gap-x-3">
       
       <!-- Left: Back Button & Title -->
-      <div class="flex items-center space-x-3 sm:space-x-4">
+      <div class="flex items-center space-x-2 sm:space-x-4">
         <!-- Back Button to Home Page -->
         <a
           href="/"
-          class="flex items-center space-x-2 px-3 py-1.5 rounded-full apple-glass text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] shadow-sm transition group"
+          class="flex items-center space-x-1.5 sm:space-x-2 px-3 py-1.5 rounded-full apple-glass text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] shadow-sm transition group shrink-0"
         >
           <i data-lucide="arrow-left" class="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition"></i>
-          <span>Back to Single Stock Forecast</span>
+          <span class="hidden sm:inline">Back to Single Stock Forecast</span>
+          <span class="sm:hidden">Back</span>
         </a>
 
         <div class="h-4 w-px bg-black/[0.08] dark:bg-white/[0.12] hidden md:block"></div>
 
         <div class="hidden md:flex items-center space-x-2">
-          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
             <i data-lucide="briefcase" class="w-4 h-4"></i>
           </div>
           <div>
             <span class="text-sm font-bold text-slate-900 dark:text-white">Owned Stocks Forecast</span>
-            <span id="vault-security-pill" class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+            <span id="vault-security-pill" class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium hidden xl:inline-block">
               Local Encrypted Cache
             </span>
           </div>
@@ -70,20 +71,20 @@
       </div>
 
       <!-- Right Header Actions: Market Status + Countdown + Privacy Mask + Recalculate + Theme Toggle -->
-      <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+      <div class="flex items-center flex-wrap gap-1.5 sm:gap-2 text-xs">
         <!-- Command Palette Trigger Button (⌘K) -->
         <button
           id="cmd-palette-trigger"
-          class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:border-indigo-500/40 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition backdrop-blur-md"
+          class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:border-indigo-500/40 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition backdrop-blur-md"
           title="Quick Search & Commands (⌘K or /)"
         >
           <i data-lucide="command" class="w-3.5 h-3.5 text-indigo-500"></i>
-          <span class="text-[11px] hidden lg:inline font-medium">Quick Jump</span>
+          <span class="text-[11px] hidden xl:inline font-medium">Quick Jump</span>
           <kbd class="text-[10px] px-1.5 py-0.5 rounded bg-black/[0.06] dark:bg-white/[0.08] font-mono font-semibold text-slate-400">⌘K</kbd>
         </button>
 
         <!-- Live US Market Session Countdown & Progress Ring -->
-        <div id="market-countdown-pill" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
+        <div id="market-countdown-pill" class="hidden xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 36 36">
             <path class="text-black/[0.08] dark:text-white/[0.1]" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
             <path id="market-progress-ring" class="market-progress-ring-circle text-indigo-500" stroke-dasharray="100, 100" stroke-dashoffset="25" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
@@ -92,7 +93,7 @@
         </div>
 
         <!-- Live US Market Status Pill -->
-        <div id="market-status-pill" class="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
+        <div id="market-status-pill" class="hidden 2xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] backdrop-blur-md">
           <span id="market-dot" class="w-2 h-2 rounded-full bg-amber-500 market-pulse-amber"></span>
           <span id="market-status-text" class="font-medium text-[11px] text-slate-700 dark:text-slate-300">Checking Market...</span>
         </div>
@@ -106,38 +107,38 @@
         <!-- Privacy Shield Mask Button -->
         <button
           id="vault-privacy-toggle"
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+          class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
           title="Toggle Privacy Mask (Hide Balances)"
         >
           <i id="privacy-icon" data-lucide="eye" class="w-3.5 h-3.5"></i>
-          <span class="text-[11px] font-medium hidden sm:inline">Privacy Mask</span>
+          <span class="text-[11px] font-medium hidden lg:inline">Privacy Mask</span>
         </button>
 
         <!-- Recalculate Forecast Button -->
         <button
           id="portfolio-recalc-btn"
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+          class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl apple-glass text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
           title="Recalculate Projections"
         >
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-          <span class="text-[11px] font-medium hidden sm:inline">Recalculate</span>
+          <span class="text-[11px] font-medium hidden lg:inline">Recalculate</span>
         </button>
 
         <!-- 1-Click Export Institutional PDF Memorandum -->
         <button
           id="portfolio-export-pdf-btn"
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl apple-glass text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] transition shadow-sm"
+          class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl apple-glass text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] transition shadow-sm"
           title="Export Portfolio Investment Memorandum (PDF)"
         >
           <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-500"></i>
-          <span class="text-[11px] hidden sm:inline">Export PDF</span>
+          <span class="text-[11px] hidden lg:inline">Export PDF</span>
         </button>
 
         <!-- Light / Dark Mode Toggle Button -->
         <button
           id="theme-toggle-btn"
           aria-label="Toggle theme"
-          class="w-9 h-9 rounded-full flex items-center justify-center border border-black/[0.08] dark:border-white/[0.12] bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 transition-all shadow-sm"
+          class="w-9 h-9 rounded-full flex items-center justify-center border border-black/[0.08] dark:border-white/[0.12] bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 transition-all shadow-sm shrink-0"
         >
           <i id="theme-toggle-icon" data-lucide="moon" class="w-4 h-4"></i>
         </button>
