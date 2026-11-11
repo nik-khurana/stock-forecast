@@ -258,7 +258,14 @@ class AIChatService:
             "Content-Type": "application/json"
         }
 
-        models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        # Candidate free models on Groq in priority order
+        models_to_try = [
+            "qwen/qwen3.8-27b",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant"
+        ]
         last_error = ""
 
         for model_name in models_to_try:

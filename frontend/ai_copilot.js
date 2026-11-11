@@ -229,7 +229,7 @@
             </span>
           </div>
           <span class="font-mono text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 font-semibold flex-shrink-0" id="ai-active-provider-badge">
-            ${selectedProvider === 'gemini' ? 'Gemini 1.5' : selectedProvider === 'groq' ? 'Groq LLaMA' : 'Quant + Free AI'}
+            ${selectedProvider === 'gemini' ? 'Gemini 1.5' : selectedProvider === 'groq' ? 'Groq Free' : 'Quant + Free AI'}
           </span>
         </div>
 
@@ -269,7 +269,7 @@
               <select id="ai-provider-select" class="apple-glass rounded-lg px-2 py-0.5 text-[10px] text-slate-700 dark:text-slate-300 focus:outline-none">
                 <option value="auto" ${selectedProvider === 'auto' ? 'selected' : ''}>Auto (Best Available)</option>
                 <option value="gemini" ${selectedProvider === 'gemini' ? 'selected' : ''}>Google Gemini Flash (Free)</option>
-                <option value="groq" ${selectedProvider === 'groq' ? 'selected' : ''}>Groq LLaMA 3.3 70B (Free)</option>
+                <option value="groq" ${selectedProvider === 'groq' ? 'selected' : ''}>Groq Cloud (Free: Qwen / GPT-OSS)</option>
                 <option value="openrouter" ${selectedProvider === 'openrouter' ? 'selected' : ''}>OpenRouter (Free Models)</option>
               </select>
             </div>
@@ -404,7 +404,7 @@
         selectedProvider = detected;
         const badge = document.getElementById("ai-active-provider-badge");
         if (badge) {
-          badge.textContent = detected === "groq" ? "Groq LLaMA 3.3" : detected === "gemini" ? "Gemini 1.5" : "OpenRouter";
+          badge.textContent = detected === "groq" ? "Groq Free" : detected === "gemini" ? "Gemini 1.5" : "OpenRouter";
         }
       }
     });
@@ -423,9 +423,9 @@
       
       const badge = document.getElementById("ai-active-provider-badge");
       if (badge) {
-        badge.textContent = provVal === "groq" ? "Groq LLaMA 3.3" : provVal === "gemini" ? "Gemini 1.5" : keyVal ? "Custom Key" : "Quant + Free AI";
+        badge.textContent = provVal === "groq" ? "Groq Free" : provVal === "gemini" ? "Gemini 1.5" : keyVal ? "Custom Key" : "Quant + Free AI";
       }
-      appendSystemMessage(keyVal ? `Connected key for ${provVal === "groq" ? "Groq LLaMA 3.3" : provVal}.` : "Using server built-in free AI and quant engine.");
+      appendSystemMessage(keyVal ? `Connected key for ${provVal === "groq" ? "Groq Free" : provVal}.` : "Using server built-in free AI and quant engine.");
     });
 
     providerSelect?.addEventListener("change", (e) => {
