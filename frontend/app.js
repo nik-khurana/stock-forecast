@@ -340,16 +340,19 @@ function initEventListeners() {
   const toggleDailyBtn = document.getElementById("toggle-daily-table-btn");
   const dailyTableContainer = document.getElementById("daily-table-container");
   const dailyChevron = document.getElementById("daily-table-chevron");
+  const dailyPill = document.getElementById("daily-table-status-pill");
 
   if (toggleDailyBtn && dailyTableContainer) {
     toggleDailyBtn.addEventListener("click", () => {
       const isHidden = dailyTableContainer.classList.contains("hidden");
       if (isHidden) {
         dailyTableContainer.classList.remove("hidden");
-        dailyChevron.classList.add("rotate-180");
+        if (dailyChevron) dailyChevron.classList.add("rotate-180");
+        if (dailyPill) dailyPill.textContent = "Click to collapse";
       } else {
         dailyTableContainer.classList.add("hidden");
-        dailyChevron.classList.remove("rotate-180");
+        if (dailyChevron) dailyChevron.classList.remove("rotate-180");
+        if (dailyPill) dailyPill.textContent = "Click to expand";
       }
     });
   }
@@ -358,16 +361,19 @@ function initEventListeners() {
   const toggleBtn = document.getElementById("toggle-table-btn");
   const tableContainer = document.getElementById("monthly-table-container");
   const chevron = document.getElementById("table-chevron");
+  const monthlyPill = document.getElementById("monthly-table-status-pill");
 
   if (toggleBtn && tableContainer) {
     toggleBtn.addEventListener("click", () => {
       const isHidden = tableContainer.classList.contains("hidden");
       if (isHidden) {
         tableContainer.classList.remove("hidden");
-        chevron.classList.add("rotate-180");
+        if (chevron) chevron.classList.add("rotate-180");
+        if (monthlyPill) monthlyPill.textContent = "Click to collapse";
       } else {
         tableContainer.classList.add("hidden");
-        chevron.classList.remove("rotate-180");
+        if (chevron) chevron.classList.remove("rotate-180");
+        if (monthlyPill) monthlyPill.textContent = "Click to expand";
       }
     });
   }

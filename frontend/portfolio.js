@@ -565,15 +565,41 @@ function initPortfolioEventListeners() {
   }
 
   // Toggle 60-Day Daily Table
+  const dailyChevron = document.getElementById("portfolio-daily-chevron");
+  const dailyPill = document.getElementById("portfolio-daily-status-pill");
+
   if (toggleDailyBtn && dailyContainer) {
     toggleDailyBtn.addEventListener("click", () => {
       const isHidden = dailyContainer.classList.contains("hidden");
       if (isHidden) {
         dailyContainer.classList.remove("hidden");
-        toggleDailyBtn.textContent = "Hide Daily Table";
+        if (dailyChevron) dailyChevron.classList.add("rotate-180");
+        if (dailyPill) dailyPill.textContent = "Click to collapse";
       } else {
         dailyContainer.classList.add("hidden");
-        toggleDailyBtn.textContent = "View Daily Table";
+        if (dailyChevron) dailyChevron.classList.remove("rotate-180");
+        if (dailyPill) dailyPill.textContent = "Click to expand";
+      }
+    });
+  }
+
+  // Toggle 36-Month Multi-Year Table
+  const toggle3yBtn = document.getElementById("toggle-portfolio-3y-btn");
+  const monthlyContainer = document.getElementById("portfolio-monthly-table-container");
+  const monthlyChevron = document.getElementById("portfolio-3y-chevron");
+  const monthlyPill = document.getElementById("portfolio-3y-status-pill");
+
+  if (toggle3yBtn && monthlyContainer) {
+    toggle3yBtn.addEventListener("click", () => {
+      const isHidden = monthlyContainer.classList.contains("hidden");
+      if (isHidden) {
+        monthlyContainer.classList.remove("hidden");
+        if (monthlyChevron) monthlyChevron.classList.add("rotate-180");
+        if (monthlyPill) monthlyPill.textContent = "Click to collapse";
+      } else {
+        monthlyContainer.classList.add("hidden");
+        if (monthlyChevron) monthlyChevron.classList.remove("rotate-180");
+        if (monthlyPill) monthlyPill.textContent = "Click to expand";
       }
     });
   }
