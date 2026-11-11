@@ -435,14 +435,14 @@ class AIChatService:
                 progress_pct = (total_val / milestone_target * 100) if milestone_target > 0 else 0
                 return (
                     f"### 🎯 Financial Milestone Trajectory Report\n\n"
-                    f"- **Projected Hit Date**: **{milestone_date}**\n"
+                    f"- **Projected Hit Date**: **{milestone_date}** *(Expected Mean Trajectory)*\n"
                     f"- **Current Progress**: **{progress_pct:.1f}%** towards milestone\n"
-                    f"- **Projected 3-Year CAGR**: **{cagr:+.2f}% annual compound growth**\n"
+                    f"- **Projected 3-Year CAGR**: **{cagr:+.2f}% annual compound growth (Mean Path)**\n"
                     f"- **Short-Term Horizon**: **{roi_60d:+.2f}% 60-day projected return**\n\n"
                     f"#### 📈 Strategic Acceleration Recommendations:\n"
                     f"1. **Dollar-Cost Averaging (DCA)**: Periodic monthly additions can accelerate your target date by up to 35%.\n"
                     f"2. **Rebalance Volatility**: Reallocating underperforming positions into high-Sharpe growth anchors preserves compounding momentum.\n\n"
-                    f"*Note: Probabilistic estimate based on multi-asset geometric diffusion.*"
+                    f"*Note: Probabilistic estimate strictly based on expected mean price trajectory (not upper max envelope).*"
                 )
 
             # 2. 3-Year Outlook & Future Trajectory

@@ -2697,6 +2697,7 @@ function calculateCurrentPortfolioEquity() {
 
 /**
  * Financial Goal Milestone & Time-to-Target Calculator
+ * Strictly projects completion date using the statistical Expected Mean price path (not upper envelope max).
  */
 function updateGoalMilestoneCalculator(data = null) {
   if (data) {
@@ -2706,6 +2707,9 @@ function updateGoalMilestoneCalculator(data = null) {
   const currentVal = calculateCurrentPortfolioEquity();
   const cagr = (portfolioForecastData && portfolioForecastData.portfolio_3y_summary && typeof portfolioForecastData.portfolio_3y_summary.cagr_3y_pct === "number")
     ? portfolioForecastData.portfolio_3y_summary.cagr_3y_pct
+    : null;
+  const dailyTrajectory = (portfolioForecastData && Array.isArray(portfolioForecastData.portfolio_60d_daily))
+    ? portfolioForecastData.portfolio_60d_daily
     : null;
   const monthlyTrajectory = (portfolioForecastData && Array.isArray(portfolioForecastData.portfolio_3y_monthly))
     ? portfolioForecastData.portfolio_3y_monthly
@@ -2725,7 +2729,7 @@ function updateGoalMilestoneCalculator(data = null) {
   if (cagrBadge) {
     if (cagr !== null && typeof cagr === "number") {
       const sign = cagr >= 0 ? "+" : "";
-      cagrBadge.textContent = `Projected CAGR: ${sign}${safeFixed(cagr, 2)}%`;
+      cagrBadge.textContent = `Projected CAGR (Mean): ${sign}${safeFixed(cagr, 2)}%`;
       cagrBadge.className = cagr >= 0
         ? "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
         : "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
@@ -2775,28 +2779,67 @@ function updateGoalMilestoneCalculator(data = null) {
       return;
     }
 
-    // 1. Check exact 36-month ML monthly trajectory first
+    // 1. Check exact 60-day daily expected mean trajectory first
+    if (dailyTrajectory && dailyTrajectory.length > 0) {
+      const hitDayObj = dailyTrajectory.find(d => (d.mean || 0) >= validTarget);
+      if (hitDayObj) {
+        const dIdx = hitDayObj.day_index || 1;
+        let dayDateStr = hitDayObj.date || `Day +${dIdx}`;
+        if (hitDayObj.date && hitDayObj.date.includes("-")) {
+          const dParts = hitDayObj.date.split("-");
+          if (dParts.length === 3) {
+            const dt = new Date(parseInt(dParts[0], 10), parseInt(dParts[1], 10) - 1, parseInt(dParts[2], 10));
+            dayDateStr = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          }
+        }
+
+        if (statusBadge) {
+          statusBadge.textContent = "Near-Term Target 🎯";
+          statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
+        }
+        if (dateElem) dateElem.textContent = dayDateStr;
+        if (timeElem) {
+          timeElem.textContent = `Estimated in ~${dIdx} day${dIdx > 1 ? "s" : ""} (${dayDateStr}) based on expected mean daily forecast`;
+        }
+        return;
+      }
+    }
+
+    // 2. Check exact 36-month ML monthly expected mean trajectory
     let hitMonthObj = null;
     if (monthlyTrajectory && monthlyTrajectory.length > 0) {
       hitMonthObj = monthlyTrajectory.find(m => (m.mean || 0) >= validTarget);
     }
 
     if (hitMonthObj) {
-      const mIdx = hitMonthObj.month || 1;
+      const mIdx = hitMonthObj.month_index || hitMonthObj.month || 1;
+      let dateLabel = hitMonthObj.year_month || `Month +${mIdx}`;
+      if (hitMonthObj.year_month && hitMonthObj.year_month.includes("-")) {
+        const parts = hitMonthObj.year_month.split("-");
+        if (parts.length === 2) {
+          const yr = parseInt(parts[0], 10);
+          const mo = parseInt(parts[1], 10);
+          if (!isNaN(yr) && !isNaN(mo)) {
+            const dt = new Date(yr, mo - 1, 1);
+            dateLabel = dt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+          }
+        }
+      }
+
       if (statusBadge) {
         statusBadge.textContent = mIdx <= 12 ? "Near-Term Target 🎯" : "On Track 🚀";
         statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
       }
-      if (dateElem) dateElem.textContent = hitMonthObj.date || `Month ${mIdx}`;
+      if (dateElem) dateElem.textContent = dateLabel;
       if (timeElem) {
         timeElem.textContent = mIdx <= 12
-          ? `Estimated in ~${mIdx} month${mIdx > 1 ? "s" : ""} based on 36-month ML forecast`
-          : `Estimated in ~${safeFixed(mIdx / 12, 1)} years (${mIdx} months) based on 36-month ML forecast`;
+          ? `Estimated in ~${mIdx} month${mIdx > 1 ? "s" : ""} (${dateLabel}) based on expected mean trajectory`
+          : `Estimated in ~${safeFixed(mIdx / 12, 1)} years (${mIdx} months, ${dateLabel}) based on expected mean trajectory`;
       }
       return;
     }
 
-    // 2. Beyond 36 months, calculate using compound annual growth rate (CAGR)
+    // 3. Beyond 36 months, calculate using compound annual growth rate (CAGR) of expected mean
     if (cagr !== null && cagr > 0) {
       const r = cagr / 100;
       const years = Math.log(validTarget / currentVal) / Math.log(1 + r);
@@ -2813,12 +2856,12 @@ function updateGoalMilestoneCalculator(data = null) {
 
       if (dateElem) dateElem.textContent = dateStr;
       if (timeElem) {
-        timeElem.textContent = `Estimated in ~${safeFixed(years, 1)} years (${totalMonths} months) at ${safeFixed(cagr, 1)}% CAGR`;
+        timeElem.textContent = `Estimated in ~${safeFixed(years, 1)} years (${totalMonths} months) at ${safeFixed(cagr, 1)}% expected mean CAGR`;
       }
       return;
     }
 
-    // 3. CAGR is zero or negative
+    // 4. Expected mean CAGR is zero or negative
     if (cagr !== null && cagr <= 0) {
       if (statusBadge) {
         statusBadge.textContent = "Flat / Low Drift";
@@ -2827,12 +2870,12 @@ function updateGoalMilestoneCalculator(data = null) {
       if (dateElem) dateElem.textContent = "Requires Growth Drift";
       const shortfall = Math.max(0, validTarget - currentVal);
       if (timeElem) {
-        timeElem.textContent = `Target requires +$${safeInt(shortfall)} capital appreciation or contributions`;
+        timeElem.textContent = `Target requires +$${safeInt(shortfall)} expected mean appreciation or contributions`;
       }
       return;
     }
 
-    // 4. Forecast still loading or not yet available: project with standard 10% market benchmark
+    // 5. Forecast still loading or not yet available: project with standard 10% market benchmark
     const r = 0.10;
     const years = Math.log(validTarget / currentVal) / Math.log(1 + r);
     const totalMonths = Math.max(1, Math.round(years * 12));
@@ -2846,7 +2889,7 @@ function updateGoalMilestoneCalculator(data = null) {
     }
     if (dateElem) dateElem.textContent = `~${dateStr}`;
     if (timeElem) {
-      timeElem.textContent = `Estimated in ~${safeFixed(years, 1)} years (${totalMonths} mos) at 10% benchmark (*updating live...)`;
+      timeElem.textContent = `Estimated in ~${safeFixed(years, 1)} years (${totalMonths} mos) at 10% expected mean drift (*updating live...)`;
     }
   };
 
