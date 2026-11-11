@@ -40,6 +40,7 @@ function getMsUntilNext10MinMark() {
 
 // Chart.js instances
 let forecastChart = null;
+let dailyForecastChart = null;
 let monthlyChart = null;
 
 // Initialize on DOM ready
@@ -285,6 +286,7 @@ function initEventListeners() {
       if (currentData) {
         const modelPayload = currentData.models_comparison[selectedModel] || currentData.models_comparison["ensemble"];
         renderForecastChart(currentData.historical_points, modelPayload.daily);
+        renderDailyForecastChart(modelPayload.daily);
         renderMonthlyForecast(currentData.forecast_3y_monthly);
       }
       showToast(
@@ -1303,6 +1305,7 @@ function updateModelView(isLiveUpdate = false) {
   }
 
   renderForecastChart(currentData.historical_points, daily, isLiveUpdate);
+  renderDailyForecastChart(daily, isLiveUpdate);
 }
 
 /**
@@ -1584,6 +1587,174 @@ function renderForecastChart(historical, dailyForecast, isLiveUpdate = false) {
               }
               return "";
             },
+          },
+        },
+        y: {
+          grid: {
+            color: gridColor,
+          },
+          ticks: {
+            color: tickColor,
+            callback: (v) => `$${v}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Renders the dedicated 30-Day Daily Forecast Projections Chart (above the collapsible daily table).
+ * Features day-by-day Min/Mean/Max confidence bands, support floor line, crosshair plugin, and clean tooltips.
+ * In live streaming mode (isLiveUpdate = true), smoothly updates datasets without destroying the canvas.
+ */
+function renderDailyForecastChart(dailyForecast, isLiveUpdate = false) {
+  const canvas = document.getElementById("dailyForecastChart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dark = isDarkMode();
+
+  const labels = dailyForecast.map((pt, idx) => {
+    try {
+      const parts = pt.date.split("-");
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const monthStr = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        return `D+${idx + 1} (${monthStr})`;
+      }
+    } catch (e) {}
+    return `Day +${idx + 1}`;
+  });
+
+  const means = dailyForecast.map((pt) => pt.mean);
+  const mins = dailyForecast.map((pt) => pt.min);
+  const maxs = dailyForecast.map((pt) => pt.max);
+
+  if (isLiveUpdate && dailyForecastChart) {
+    dailyForecastChart.data.labels = labels;
+    if (dailyForecastChart.data.datasets[0]) dailyForecastChart.data.datasets[0].data = maxs;
+    if (dailyForecastChart.data.datasets[1]) dailyForecastChart.data.datasets[1].data = mins;
+    if (dailyForecastChart.data.datasets[2]) dailyForecastChart.data.datasets[2].data = means;
+    if (showSupportLine && currentData && currentData.support_levels && dailyForecastChart.data.datasets[3]) {
+      const floorPrice = currentData.support_levels.critical_support_floor;
+      dailyForecastChart.data.datasets[3].data = labels.map(() => floorPrice);
+      dailyForecastChart.data.datasets[3].label = `Critical Support Floor ($${floorPrice.toFixed(2)})`;
+    }
+    dailyForecastChart.update('none');
+    return;
+  }
+
+  if (dailyForecastChart) {
+    dailyForecastChart.destroy();
+  }
+
+  const gridColor = dark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.05)";
+  const tickColor = dark ? "#64748b" : "#94a3b8";
+  const legendColor = dark ? "#94a3b8" : "#475569";
+  const tooltipBg = dark ? "rgba(0, 0, 0, 0.95)" : "#ffffff";
+  const tooltipBorder = dark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.08)";
+  const tooltipText = dark ? "#ffffff" : "#0f172a";
+  const tooltipTitle = dark ? "#94a3b8" : "#64748b";
+
+  const datasets = [
+    {
+      label: "Predicted Max (90th %ile)",
+      data: maxs,
+      borderColor: "rgba(16, 185, 129, 0.7)",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      fill: "+1",
+      backgroundColor: dark ? "rgba(99, 102, 241, 0.10)" : "rgba(99, 102, 241, 0.06)",
+      tension: 0.25,
+    },
+    {
+      label: "Predicted Min (10th %ile)",
+      data: mins,
+      borderColor: "rgba(244, 63, 94, 0.7)",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      fill: false,
+      tension: 0.25,
+    },
+    {
+      label: "Predicted Mean Path",
+      data: means,
+      borderColor: "#6366f1",
+      borderWidth: 2.5,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      pointBackgroundColor: "#818cf8",
+      tension: 0.25,
+    },
+  ];
+
+  if (showSupportLine && currentData && currentData.support_levels) {
+    const floorPrice = currentData.support_levels.critical_support_floor;
+    datasets.push({
+      label: `Critical Support Floor ($${floorPrice.toFixed(2)})`,
+      data: labels.map(() => floorPrice),
+      borderColor: dark ? "rgba(244, 63, 94, 0.9)" : "rgba(225, 29, 72, 0.9)",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+    });
+  }
+
+  dailyForecastChart = new Chart(ctx, {
+    type: "line",
+    plugins: [getCrosshairPlugin(dark)],
+    data: {
+      labels: labels,
+      datasets: datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: legendColor,
+            boxWidth: 10,
+            usePointStyle: true,
+          },
+        },
+        tooltip: {
+          backgroundColor: tooltipBg,
+          titleColor: tooltipTitle,
+          bodyColor: tooltipText,
+          borderColor: tooltipBorder,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            title: function (items) {
+              if (!items || !items.length) return "";
+              const idx = items[0].dataIndex;
+              const pt = dailyForecast[idx];
+              return `Day +${idx + 1} • ${pt ? pt.date : ""}`;
+            },
+            label: function (context) {
+              return `${context.dataset.label}: $${context.parsed.y.toFixed(2)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            color: gridColor,
+          },
+          ticks: {
+            color: tickColor,
+            maxTicksLimit: 10,
           },
         },
         y: {
