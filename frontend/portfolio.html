@@ -103,6 +103,16 @@
           <span class="text-[11px] font-medium hidden sm:inline">Recalculate</span>
         </button>
 
+        <!-- 1-Click Export Institutional PDF Memorandum -->
+        <button
+          id="portfolio-export-pdf-btn"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl apple-glass text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-black/[0.08] dark:border-white/[0.12] transition shadow-sm"
+          title="Export Portfolio Investment Memorandum (PDF)"
+        >
+          <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span class="text-[11px] hidden sm:inline">Export PDF</span>
+        </button>
+
         <!-- Light / Dark Mode Toggle Button -->
         <button
           id="theme-toggle-btn"
@@ -118,6 +128,20 @@
 
   <!-- Main Full-Page Portfolio Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Executive Print Header for PDF Memorandum Export -->
+    <div class="print-header hidden">
+      <div class="flex items-center justify-between pb-3 border-b-2 border-slate-900">
+        <div>
+          <h1 class="text-2xl font-black text-slate-900 tracking-tight">StockCast ML &bull; Portfolio Investment Memorandum</h1>
+          <p class="text-xs text-slate-600 font-medium">Aggregated Multi-Asset Machine Learning Forecast & Modern Portfolio Theory Report</p>
+        </div>
+        <div class="text-right text-xs font-mono text-slate-500">
+          <div>CONFIDENTIAL &bull; FOR INTERNAL USE</div>
+          <div>Alpaca Market Data v2</div>
+        </div>
+      </div>
+    </div>
 
     <!-- Hero Title & Info Banner -->
     <section class="space-y-2">
@@ -370,6 +394,229 @@
             <!-- Dynamically populated -->
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Sector Allocation & Concentration Risk Section -->
+    <section id="sector-allocation-section" class="p-6 rounded-3xl apple-glass space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-500"></i>
+            <span>Sector Allocation & Concentration Risk Guardrail</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Institutional portfolio diversification analysis & Herfindahl-Hirschman (HHI) concentration score.
+          </p>
+        </div>
+        <div id="concentration-risk-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center space-x-1.5 self-start sm:self-auto">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          <span id="concentration-risk-text">Optimal Diversification</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+        <!-- Donut Chart Canvas Container (5 cols) -->
+        <div class="lg:col-span-5 flex flex-col items-center justify-center p-4">
+          <div class="relative w-64 h-64 flex items-center justify-center">
+            <canvas id="sectorDonutChart"></canvas>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+              <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Top Sector</span>
+              <span id="donut-center-sector" class="text-xs font-bold text-slate-900 dark:text-white max-w-[130px] truncate">Loading...</span>
+              <span id="donut-center-pct" class="text-sm font-extrabold text-indigo-500">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Breakdown & Risk Cards (7 cols) -->
+        <div class="lg:col-span-7 space-y-4">
+          <!-- HHI Concentration Metric Box -->
+          <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between">
+            <div class="space-y-0.5">
+              <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">HHI Concentration Index</span>
+              <p id="concentration-warning-text" class="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                Portfolio is well-balanced across multiple sectors.
+              </p>
+            </div>
+            <div class="text-right pl-3 shrink-0">
+              <span id="concentration-hhi-val" class="text-xl font-extrabold text-indigo-600 dark:text-indigo-400">0</span>
+              <span class="text-[10px] text-slate-400 block">Target: &lt;2,500</span>
+            </div>
+          </div>
+
+          <!-- Sector Rows List -->
+          <div class="space-y-2 max-h-56 overflow-y-auto pr-1" id="sector-breakdown-list">
+            <!-- Dynamically populated sector progress rows -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancing Section -->
+    <section id="portfolio-optimizer-section" class="p-6 rounded-3xl apple-glass space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-indigo-500"></i>
+            <span>Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Markowitz mean-variance optimization (SLSQP) comparing Current vs Efficient Frontier target allocations.
+          </p>
+        </div>
+
+        <!-- Strategy Profile Tabs -->
+        <div class="flex p-1 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-xs">
+          <button id="profile-tab-balanced" type="button" class="optimizer-profile-tab active px-3 py-1.5 rounded-xl font-semibold transition" data-profile="balanced">
+            Balanced (Max Sharpe)
+          </button>
+          <button id="profile-tab-conservative" type="button" class="optimizer-profile-tab px-3 py-1.5 rounded-xl font-semibold transition text-slate-400 hover:text-slate-900 dark:hover:text-white" data-profile="conservative">
+            Conservative (Min Vol)
+          </button>
+          <button id="profile-tab-aggressive" type="button" class="optimizer-profile-tab px-3 py-1.5 rounded-xl font-semibold transition text-slate-400 hover:text-slate-900 dark:hover:text-white" data-profile="aggressive">
+            Aggressive (Growth)
+          </button>
+        </div>
+      </div>
+
+      <!-- Comparison Metrics Cards (3 Cards) -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- Sharpe Ratio Improvement -->
+        <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Sharpe Ratio</span>
+          <div class="flex items-baseline space-x-2">
+            <span id="opt-current-sharpe" class="text-lg font-bold text-slate-500 dark:text-slate-400">0.00</span>
+            <span class="text-slate-400">&rarr;</span>
+            <span id="opt-target-sharpe" class="text-2xl font-extrabold text-emerald-500">0.00</span>
+          </div>
+          <span id="opt-sharpe-delta" class="text-[11px] font-semibold text-emerald-500">Risk-Adjusted Efficiency</span>
+        </div>
+
+        <!-- Expected Volatility (Risk) -->
+        <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Annual Volatility (&sigma;)</span>
+          <div class="flex items-baseline space-x-2">
+            <span id="opt-current-vol" class="text-lg font-bold text-slate-500 dark:text-slate-400">0.0%</span>
+            <span class="text-slate-400">&rarr;</span>
+            <span id="opt-target-vol" class="text-2xl font-extrabold text-cyan-500">0.0%</span>
+          </div>
+          <span id="opt-vol-delta" class="text-[11px] font-semibold text-cyan-500">Annual Risk Profile</span>
+        </div>
+
+        <!-- Expected Return -->
+        <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
+          <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Expected Annual Return</span>
+          <div class="flex items-baseline space-x-2">
+            <span id="opt-current-ret" class="text-lg font-bold text-slate-500 dark:text-slate-400">0.0%</span>
+            <span class="text-slate-400">&rarr;</span>
+            <span id="opt-target-ret" class="text-2xl font-extrabold text-indigo-500">0.0%</span>
+          </div>
+          <span id="opt-ret-delta" class="text-[11px] font-semibold text-indigo-500">Annual Return Target</span>
+        </div>
+      </div>
+
+      <!-- Rebalancing Action Plan Table -->
+      <div class="border border-black/[0.06] dark:border-white/[0.08] rounded-2xl overflow-hidden">
+        <div class="p-3.5 bg-black/[0.02] dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-200">
+          <span>Target Rebalancing Allocations & Trade Suggestions</span>
+          <span id="rebalance-status-summary" class="text-[11px] text-slate-400">Optimal weights for selected profile</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-black/[0.03] dark:bg-white/[0.04] text-slate-400 uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="py-2.5 px-4 font-semibold">Asset</th>
+                <th class="py-2.5 px-4 text-right font-semibold">Current Weight</th>
+                <th class="py-2.5 px-4 text-right font-semibold">Target Weight</th>
+                <th class="py-2.5 px-4 text-right font-semibold">Allocation Shift</th>
+                <th class="py-2.5 px-4 text-right font-semibold">Rebalance Dollar Value</th>
+                <th class="py-2.5 px-4 text-center font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody id="rebalancing-tbody" class="divide-y divide-black/[0.03] dark:divide-white/[0.05]">
+              <!-- Dynamically populated rebalancing trades -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Macro Stress-Testing & Market Crash Simulator Section -->
+    <section id="stress-test-section" class="p-6 rounded-3xl apple-glass space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="activity" class="w-4 h-4 text-rose-500"></i>
+            <span>Macro Stress-Testing & Market Crash Simulator</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            CAPM Beta sensitivity modeling under sudden macro shocks, recessions, and bull rallies.
+          </p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span id="portfolio-beta-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            Portfolio Beta: 1.00x (SPY)
+          </span>
+        </div>
+      </div>
+
+      <!-- 4 Pre-built Stress Scenarios Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5" id="stress-scenarios-grid">
+        <!-- Dynamically populated -->
+      </div>
+
+      <!-- Interactive Custom Macro Shock Slider -->
+      <div class="p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center space-x-1.5">
+              <i data-lucide="gauge" class="w-3.5 h-3.5 text-indigo-500"></i>
+              <span>Interactive S&P 500 Market Shock Simulator</span>
+            </h4>
+            <p class="text-[11px] text-slate-400">
+              Drag slider to test customized systemic shocks on your portfolio's live equity value.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="text-slate-400">Chosen Shock:</span>
+            <span id="slider-shock-pct-label" class="text-sm font-extrabold text-indigo-500 font-mono">0.0%</span>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <input
+            type="range"
+            id="macro-shock-slider"
+            min="-30"
+            max="30"
+            step="1"
+            value="0"
+            class="w-full h-2 bg-black/10 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+          />
+          <div class="flex justify-between text-[10px] text-slate-400 font-mono px-1">
+            <span>-30% Crash</span>
+            <span>-15%</span>
+            <span>0% Baseline</span>
+            <span>+15%</span>
+            <span>+30% Rally</span>
+          </div>
+        </div>
+
+        <!-- Live Dynamic Readout Box -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
+          <div class="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
+            <span class="text-[10px] text-slate-400 block uppercase">Implied Portfolio Impact</span>
+            <span id="slider-portfolio-impact-pct" class="text-base font-bold text-slate-700 dark:text-slate-300">0.0%</span>
+          </div>
+          <div class="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
+            <span class="text-[10px] text-slate-400 block uppercase">Estimated Dollar Impact</span>
+            <span id="slider-dollar-impact" class="text-base font-bold text-slate-700 dark:text-slate-300 privacy-value">$0.00</span>
+          </div>
+          <div class="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
+            <span class="text-[10px] text-slate-400 block uppercase">Stressed Portfolio Value</span>
+            <span id="slider-stressed-val" class="text-base font-bold text-indigo-500 privacy-value">$0.00</span>
+          </div>
+        </div>
       </div>
     </section>
 

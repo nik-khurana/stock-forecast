@@ -366,4 +366,66 @@ html:not(.dark) .chart-loading-overlay {
   background: rgba(255, 255, 255, 0.55);
 }
 
+/* ==========================================================================
+   Institutional Print & Executive PDF Export Styles
+   ========================================================================== */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11pt !important;
+  }
+
+  header,
+  #search-form,
+  .chip-btn,
+  #theme-toggle-btn,
+  #portfolio-recalc-btn,
+  #vault-privacy-toggle,
+  #portfolio-export-pdf-btn,
+  #share-forecast-btn,
+  #export-pdf-btn,
+  #add-holding-form,
+  .no-print {
+    display: none !important;
+  }
+
+  .apple-glass {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Executive Print Header */
+  .print-header {
+    display: block !important;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
+
+  .print-break-inside {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+.print-header {
+  display: none;
+}
+
+.optimizer-profile-tab.active {
+  background: rgba(99, 102, 241, 0.2) !important;
+  color: #6366f1 !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+}
+.dark .optimizer-profile-tab.active {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #818cf8 !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+
+
 

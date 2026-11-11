@@ -337,3 +337,82 @@ def get_company_name(ticker: str) -> str:
         return _TICKER_NAME_MAP[q]
 
     return f"{q} Common Stock"
+
+# Known Sector Mappings for Popular Equities & Major Asset Classes
+SECTOR_MAPPINGS: Dict[str, str] = {
+    # Technology & Semiconductors
+    "AAPL": "Information Technology", "MSFT": "Information Technology", "NVDA": "Semiconductors",
+    "AVGO": "Semiconductors", "AMD": "Semiconductors", "INTC": "Semiconductors", "MU": "Semiconductors",
+    "TSM": "Semiconductors", "ASML": "Semiconductors", "ARM": "Semiconductors", "QCOM": "Semiconductors",
+    "ORCL": "Information Technology", "CRM": "Information Technology", "ADBE": "Information Technology",
+    "NOW": "Information Technology", "IBM": "Information Technology", "CSCO": "Information Technology",
+    "PANW": "Cybersecurity", "CRWD": "Cybersecurity", "PLTR": "Enterprise AI & Defense",
+    "SNOW": "Cloud & Data", "SMCI": "AI Hardware Infrastructure", "MSTR": "Digital Assets Treasury",
+    "ANTH": "Frontier AI & LLMs",
+
+    # Communication Services
+    "GOOGL": "Communication Services", "GOOG": "Communication Services", "META": "Communication Services",
+    "NFLX": "Streaming & Entertainment", "DIS": "Entertainment & Media",
+
+    # Consumer Discretionary & Mobility
+    "AMZN": "Consumer Discretionary", "TSLA": "Automotive & Clean Energy", "HD": "Consumer Discretionary",
+    "LOW": "Consumer Discretionary", "TGT": "Consumer Discretionary", "NKE": "Consumer Discretionary",
+    "SBUX": "Consumer Discretionary", "MCD": "Consumer Discretionary", "CMG": "Consumer Discretionary",
+    "UBER": "Mobility & Delivery", "ABNB": "Travel & Leisure", "BKNG": "Travel & Leisure",
+
+    # Financials & Payments
+    "JPM": "Financials & Banking", "V": "Financials & Payments", "MA": "Financials & Payments",
+    "BAC": "Financials & Banking", "WFC": "Financials & Banking", "GS": "Investment Banking",
+    "MS": "Investment Banking", "BLK": "Asset Management", "AXP": "Financials & Payments",
+    "C": "Financials & Banking", "BRK.B": "Financials & Conglomerates", "PYPL": "FinTech & Payments",
+    "SQ": "FinTech & Payments", "COIN": "Crypto & Digital Assets", "STRPE": "FinTech & Payments",
+
+    # Healthcare & Life Sciences
+    "LLY": "Healthcare & Pharmaceuticals", "UNH": "Healthcare Services", "JNJ": "Healthcare & Pharmaceuticals",
+    "ABBV": "Biotechnology", "MRK": "Healthcare & Pharmaceuticals", "PFE": "Healthcare & Pharmaceuticals",
+    "TMO": "Life Sciences Tools", "ISRG": "Medical Devices",
+
+    # Industrials, Aerospace & Defense
+    "CAT": "Industrials & Machinery", "DE": "Agriculture & Machinery", "BA": "Aerospace & Defense",
+    "LMT": "Aerospace & Defense", "GE": "Aerospace & Energy", "HON": "Industrial Conglomerates",
+    "F": "Automotive", "GM": "Automotive",
+
+    # Energy & Natural Resources
+    "XOM": "Energy & Petroleum", "CVX": "Energy & Petroleum",
+
+    # Consumer Staples
+    "WMT": "Consumer Staples", "COST": "Consumer Staples", "PG": "Consumer Staples",
+    "KO": "Consumer Staples", "PEP": "Consumer Staples", "CL": "Consumer Staples",
+
+    # Benchmark ETFs & Broad Market Index Funds
+    "SPY": "S&P 500 Index ETF", "VOO": "S&P 500 Index ETF", "VTI": "Total US Stock Market ETF",
+    "QQQ": "Nasdaq 100 Tech ETF", "IWM": "Russell 2000 Small-Cap ETF", "DIA": "Dow Jones Industrial ETF",
+    "SPCX": "Space & Pre-Merger ETF",
+}
+
+def get_company_sector(ticker: str) -> str:
+    """
+    Returns the economic sector or asset category for a given stock ticker.
+    Infers sector from name/type if not present in the curated mappings.
+    """
+    q = ticker.strip().upper()
+    if q in SECTOR_MAPPINGS:
+        return SECTOR_MAPPINGS[q]
+
+    name = get_company_name(q).upper()
+    if "ETF" in name or "TRUST" in name or "INDEX" in name or "FUND" in name:
+        return "Exchange-Traded Funds (ETFs)"
+    if any(k in name for k in ("PHARM", "THERAP", "BIO", "HEALTH", "MEDIC")):
+        return "Healthcare & Biotechnology"
+    if any(k in name for k in ("TECH", "SEMI", "SOFTWARE", "MICRO", "CYBER", "DIGITAL")):
+        return "Technology & Software"
+    if any(k in name for k in ("BANK", "FINANC", "CAPITAL", "INSUR", "INVEST")):
+        return "Financials & Banking"
+    if any(k in name for k in ("OIL", "GAS", "ENERGY", "SOLAR", "PETRO")):
+        return "Energy & Natural Resources"
+    if any(k in name for k in ("AIR", "AERO", "DEFENSE", "MOTORS", "INDUST")):
+        return "Industrials & Aerospace"
+    if any(k in name for k in ("RETAIL", "FOOD", "BEVERAGE", "STORES")):
+        return "Consumer & Retail"
+
+    return "Diversified Equities"

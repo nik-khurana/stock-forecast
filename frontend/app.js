@@ -297,6 +297,14 @@ function initEventListeners() {
     });
   }
 
+  // 1-Click Export Institutional PDF Memorandum
+  const exportPdfBtn = document.getElementById("export-pdf-btn");
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener("click", () => {
+      window.print();
+    });
+  }
+
   // Toggle 30-day daily table
   const toggleDailyBtn = document.getElementById("toggle-daily-table-btn");
   const dailyTableContainer = document.getElementById("daily-table-container");
@@ -1076,11 +1084,131 @@ function renderDashboard(data, isLiveUpdate = false) {
     }
   }
 
+  // Sector Classification Badge
+  const sectorElem = document.getElementById("stock-sector-pill");
+  if (sectorElem && data.sector) {
+    sectorElem.textContent = data.sector;
+    sectorElem.classList.remove("hidden");
+  }
+
+  // Earnings Catalyst Milestone Badge
+  const catalystPill = document.getElementById("earnings-catalyst-pill");
+  const catalystText = document.getElementById("earnings-catalyst-text");
+  if (catalystText && data.earnings_catalyst) {
+    const ec = data.earnings_catalyst;
+    catalystText.textContent = `Earnings: ${ec.estimated_date} (${ec.days_remaining}d away)`;
+    if (ec.badge_color === "amber") {
+      catalystPill.className =
+        "text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-medium flex items-center space-x-1";
+    } else {
+      catalystPill.className =
+        "text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 font-medium flex items-center space-x-1";
+    }
+    catalystPill.classList.remove("hidden");
+  }
+
+  // AI News & Financial Sentiment Engine
+  if (data.news_sentiment) {
+    renderNewsSentiment(data.news_sentiment);
+  }
+
   updateModelView(isLiveUpdate);
   renderMonthlyForecast(data.forecast_3y_monthly, isLiveUpdate);
 
   if (window.lucide) {
     lucide.createIcons();
+  }
+}
+
+/**
+ * Renders real-time Alpaca market news and NLP sentiment scoring
+ */
+function renderNewsSentiment(sentiment) {
+  const badge = document.getElementById("sentiment-classification-badge");
+  const scoreVal = document.getElementById("sentiment-score-val");
+  const confVal = document.getElementById("sentiment-confidence-val");
+  const descText = document.getElementById("sentiment-desc-text");
+  const bullCount = document.getElementById("sentiment-bull-count");
+  const bearCount = document.getElementById("sentiment-bear-count");
+  const articlesContainer = document.getElementById("news-articles-container");
+
+  if (!sentiment) return;
+
+  if (badge) {
+    badge.textContent = sentiment.classification;
+    if (sentiment.sentiment_score >= 15) {
+      badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
+    } else if (sentiment.sentiment_score <= -15) {
+      badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30";
+    } else {
+      badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30";
+    }
+  }
+
+  if (scoreVal) {
+    const sign = sentiment.sentiment_score > 0 ? "+" : "";
+    scoreVal.textContent = `${sign}${sentiment.sentiment_score.toFixed(1)}`;
+    scoreVal.className = sentiment.sentiment_score >= 0 ? "text-lg font-extrabold text-emerald-500" : "text-lg font-extrabold text-rose-500";
+  }
+
+  if (confVal) {
+    confVal.textContent = `${sentiment.confidence_pct}%`;
+  }
+
+  if (descText) {
+    let topTriggerNote = "";
+    if (sentiment.top_triggers && sentiment.top_triggers.length > 0) {
+      topTriggerNote = ` Key triggers: "${sentiment.top_triggers.slice(0, 3).join('", "')}".`;
+    }
+    descText.textContent = `${sentiment.description}${topTriggerNote}`;
+  }
+
+  if (bullCount) bullCount.textContent = sentiment.bullish_count || 0;
+  if (bearCount) bearCount.textContent = sentiment.bearish_count || 0;
+
+  if (articlesContainer) {
+    articlesContainer.innerHTML = "";
+    if (!sentiment.articles || sentiment.articles.length === 0) {
+      articlesContainer.innerHTML = `
+        <div class="p-3 text-xs text-slate-400 text-center">
+          No breaking news articles available within the last 72 hours for this ticker.
+        </div>
+      `;
+      return;
+    }
+
+    sentiment.articles.slice(0, 4).forEach((art) => {
+      const artDiv = document.createElement("div");
+      artDiv.className = "p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition flex flex-col sm:flex-row sm:items-center justify-between gap-2";
+
+      let polBadgeClass = "bg-amber-500/15 text-amber-500 border-amber-500/30";
+      if (art.sentiment === "Bullish") polBadgeClass = "bg-emerald-500/15 text-emerald-500 border-emerald-500/30";
+      if (art.sentiment === "Bearish") polBadgeClass = "bg-rose-500/15 text-rose-500 border-rose-500/30";
+
+      const timeAgo = art.published_at ? art.published_at.slice(0, 10) : "";
+
+      artDiv.innerHTML = `
+        <div class="space-y-1 flex-1 pr-2">
+          <div class="flex items-center space-x-2">
+            <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase border ${polBadgeClass}">${art.sentiment}</span>
+            <span class="text-[10px] text-slate-400 font-medium">${art.source || "Market Wire"} &bull; ${timeAgo}</span>
+          </div>
+          <a href="${art.url || '#'}" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-slate-800 dark:text-slate-200 hover:text-indigo-500 dark:hover:text-indigo-400 transition line-clamp-1 block">
+            ${art.title}
+          </a>
+          ${art.summary ? `<p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">${art.summary}</p>` : ''}
+        </div>
+        <a href="${art.url || '#'}" target="_blank" rel="noopener noreferrer" class="self-start sm:self-center px-2.5 py-1 rounded-xl apple-glass text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 flex items-center space-x-1 border border-indigo-500/20 hover:bg-indigo-500/10 transition whitespace-nowrap">
+          <span>Read Wire</span>
+          <i data-lucide="external-link" class="w-3 h-3"></i>
+        </a>
+      `;
+      articlesContainer.appendChild(artDiv);
+    });
+
+    if (window.lucide) {
+      lucide.createIcons({ root: articlesContainer });
+    }
   }
 }
 

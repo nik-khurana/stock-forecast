@@ -41,6 +41,8 @@ from backend.app.config import (
 from backend.app.alpaca_client import AlpacaClient
 from backend.app.forecast_service import ForecastService
 from backend.app.company_database import search_companies, resolve_ticker, sync_alpaca_assets_live
+from backend.app.sentiment_service import SentimentService
+from backend.app.portfolio_optimizer import PortfolioOptimizer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -252,6 +254,7 @@ app.add_middleware(
 # Core service singletons
 forecast_service = ForecastService()
 alpaca_client = AlpacaClient()
+portfolio_optimizer = PortfolioOptimizer()
 
 # Predefined benchmark and large-cap tickers for search suggestions
 POPULAR_TICKERS = [
@@ -344,6 +347,24 @@ def get_forecast(
             detail=f"Forecasting calculation failed for symbol {clean_ticker}."
         )
 
+@app.get("/api/stock/{ticker}/news")
+def get_stock_news(ticker: str, request: Request, limit: int = Query(6, ge=1, le=20)):
+    """
+    Returns live breaking headlines and quantitative NLP financial sentiment evaluation for a ticker.
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    enforce_rate_limit(client_ip)
+    resolved = resolve_ticker(ticker)
+    clean_ticker = validate_ticker(resolved)
+    try:
+        return SentimentService.evaluate_news_sentiment(clean_ticker)
+    except Exception as exc:
+        logger.error("Error retrieving news for %s: %s", clean_ticker, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unable to retrieve news sentiment for {clean_ticker}."
+        )
+
 # -------------------------------------------------------------
 # Portfolio / Owned Stocks Forecasting Models & Endpoint
 # -------------------------------------------------------------
@@ -382,6 +403,102 @@ def get_portfolio_forecast(req: PortfolioRequest, request: Request):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Portfolio forecasting calculation failed. Please check ticker symbols and try again."
+        )
+
+class OptimizeRequest(BaseModel):
+    holdings: List[HoldingItem] = Field(..., min_length=1, max_length=50)
+    profile: str = Field("balanced", description="Risk profile: conservative, balanced, or aggressive")
+
+@app.post("/api/portfolio/optimize")
+def optimize_portfolio_endpoint(req: OptimizeRequest, request: Request):
+    """
+    Computes Modern Portfolio Theory (MPT) Efficient Frontier optimal allocations,
+    Sharpe ratios, and dollar rebalancing recommendations.
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    enforce_rate_limit(client_ip)
+    try:
+        norm_holdings = []
+        for h in req.holdings:
+            tk = validate_ticker(resolve_ticker(h.ticker))
+            quote = alpaca_client.get_latest_quote(tk)
+            cur_p = quote.get("price", h.buy_price)
+            norm_holdings.append({
+                "ticker": tk,
+                "shares": h.shares,
+                "buy_price": h.buy_price,
+                "current_price": cur_p
+            })
+        return portfolio_optimizer.optimize_portfolio(norm_holdings, risk_profile=req.profile)
+    except Exception as exc:
+        logger.error("Error optimizing portfolio: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Portfolio optimization failed."
+        )
+
+class StressTestRequest(BaseModel):
+    holdings: List[HoldingItem] = Field(..., min_length=1, max_length=50)
+    market_shock_pct: float = Field(-10.0, ge=-50.0, le=50.0, description="Hypothetical S&P 500 move %")
+
+@app.post("/api/portfolio/stress-test")
+def stress_test_portfolio_endpoint(req: StressTestRequest, request: Request):
+    """
+    Simulates custom macroeconomic shock on portfolio value and individual holdings based on CAPM Betas.
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    enforce_rate_limit(client_ip)
+    try:
+        norm_holdings = []
+        for h in req.holdings:
+            tk = validate_ticker(resolve_ticker(h.ticker))
+            quote = alpaca_client.get_latest_quote(tk)
+            cur_p = quote.get("price", h.buy_price)
+            norm_holdings.append({
+                "ticker": tk,
+                "shares": h.shares,
+                "buy_price": h.buy_price,
+                "current_price": cur_p
+            })
+        opt_res = portfolio_optimizer.optimize_portfolio(norm_holdings, risk_profile="balanced")
+        total_val = opt_res["total_portfolio_value"]
+        port_beta = opt_res["portfolio_beta"]
+        
+        mkt_pct = req.market_shock_pct
+        port_pnl_pct = round(port_beta * mkt_pct, 2)
+        dollar_impact = round(total_val * (port_pnl_pct / 100.0), 2)
+        proj_val = round(total_val + dollar_impact, 2)
+
+        holding_shocks = []
+        for r in opt_res["rebalance_recommendations"]:
+            tk = r["ticker"]
+            b = r.get("beta", 1.0)
+            h_pct = round(b * mkt_pct, 2)
+            c_val = r["current_value"]
+            h_dollar = round(c_val * (h_pct / 100.0), 2)
+            holding_shocks.append({
+                "ticker": tk,
+                "beta": b,
+                "current_value": c_val,
+                "expected_move_pct": h_pct,
+                "dollar_impact": h_dollar,
+                "projected_value": round(c_val + h_dollar, 2)
+            })
+
+        return {
+            "market_shock_pct": mkt_pct,
+            "portfolio_beta": port_beta,
+            "current_portfolio_value": total_val,
+            "projected_portfolio_value": proj_val,
+            "projected_return_pct": port_pnl_pct,
+            "dollar_impact": dollar_impact,
+            "holdings": holding_shocks
+        }
+    except Exception as exc:
+        logger.error("Error executing stress test: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Portfolio stress test failed."
         )
 
 

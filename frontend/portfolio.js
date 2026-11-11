@@ -767,6 +767,39 @@ function initPortfolioEventListeners() {
   const adjustForm = document.getElementById("adjust-position-form");
   if (directForm) directForm.addEventListener("submit", handleDirectEditSubmit);
   if (adjustForm) adjustForm.addEventListener("submit", handleAdjustPositionSubmit);
+
+  // 1-Click Export Portfolio PDF Memorandum
+  const exportPdfBtn = document.getElementById("portfolio-export-pdf-btn");
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener("click", () => {
+      window.print();
+    });
+  }
+
+  // Modern Portfolio Theory (MPT) Strategy Profile Tabs
+  document.querySelectorAll(".optimizer-profile-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".optimizer-profile-tab").forEach((t) => {
+        t.classList.remove("active");
+        t.className = "optimizer-profile-tab px-3 py-1.5 rounded-xl font-semibold transition text-slate-400 hover:text-slate-900 dark:hover:text-white";
+      });
+      tab.classList.add("active");
+      tab.className = "optimizer-profile-tab active px-3 py-1.5 rounded-xl font-semibold transition";
+      selectedOptimizerProfile = tab.getAttribute("data-profile") || "balanced";
+      if (currentOptimizationData && portfolioForecastData) {
+        updateOptimizerProfileView(currentOptimizationData, portfolioForecastData.current_portfolio_value);
+      }
+    });
+  });
+
+  // Macro Stress-Testing Interactive Shock Slider
+  const shockSlider = document.getElementById("macro-shock-slider");
+  if (shockSlider) {
+    shockSlider.addEventListener("input", (e) => {
+      const shockPct = parseFloat(e.target.value);
+      updateSliderShockReadout(shockPct);
+    });
+  }
 }
 
 /**
@@ -1348,11 +1381,21 @@ function clearPortfolioForecastUI() {
     portfolio3yChart.destroy();
     portfolio3yChart = null;
   }
+  if (sectorDonutChartInstance) {
+    sectorDonutChartInstance.destroy();
+    sectorDonutChartInstance = null;
+  }
 
   const dailyTbody = document.getElementById("portfolio-daily-tbody");
   if (dailyTbody) dailyTbody.innerHTML = "";
   const monthlyTbody = document.getElementById("portfolio-monthly-tbody");
   if (monthlyTbody) monthlyTbody.innerHTML = "";
+  const sectorList = document.getElementById("sector-breakdown-list");
+  if (sectorList) sectorList.innerHTML = "";
+  const rebalTbody = document.getElementById("rebalancing-tbody");
+  if (rebalTbody) rebalTbody.innerHTML = "";
+  const stressGrid = document.getElementById("stress-scenarios-grid");
+  if (stressGrid) stressGrid.innerHTML = "";
   syncPortfolioLiveStreaming();
 }
 
@@ -1608,6 +1651,21 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
   populatePortfolioDailyTable(data.portfolio_60d_daily, data.current_portfolio_value);
   renderPortfolio3yChart(data.portfolio_3y_monthly, isLiveUpdate);
   populatePortfolioMonthlyTable(data.portfolio_3y_monthly);
+
+  // Sector Allocation Donut & Concentration Guardrail
+  if (data.sector_allocation && data.concentration_risk) {
+    renderSectorAllocation(data.sector_allocation, data.concentration_risk, data.current_portfolio_value);
+  }
+
+  // Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
+  if (data.portfolio_optimization) {
+    renderPortfolioOptimizer(data.portfolio_optimization, data.current_portfolio_value);
+  }
+
+  // Macro Stress-Testing & Market Crash Simulator
+  if (data.stress_test) {
+    renderMacroStressTest(data.stress_test, data.current_portfolio_value);
+  }
 
   applyPrivacyMask();
 }
@@ -1993,6 +2051,360 @@ function populatePortfolioMonthlyTable(monthlyPoints) {
     `;
     tbody.appendChild(tr);
   });
+}
+
+/**
+ * Sector Allocation Donut Chart & Concentration Risk Guardrail
+ */
+let sectorDonutChartInstance = null;
+
+function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
+  const canvas = document.getElementById("sectorDonutChart");
+  if (!canvas || !Array.isArray(sectors) || sectors.length === 0) return;
+
+  const isDark = isDarkMode();
+  const colors = [
+    "#6366f1", // Indigo
+    "#06b6d4", // Cyan
+    "#10b981", // Emerald
+    "#f59e0b", // Amber
+    "#ec4899", // Pink
+    "#8b5cf6", // Purple
+    "#3b82f6", // Blue
+    "#14b8a6", // Teal
+    "#f97316", // Orange
+    "#64748b"  // Slate
+  ];
+
+  const labels = sectors.map((s) => s.sector);
+  const dataVals = sectors.map((s) => s.value);
+  const bgColors = sectors.map((_, i) => colors[i % colors.length]);
+
+  if (sectorDonutChartInstance) {
+    sectorDonutChartInstance.destroy();
+  }
+
+  sectorDonutChartInstance = new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          data: dataVals,
+          backgroundColor: bgColors,
+          borderWidth: 2,
+          borderColor: isDark ? "#000000" : "#ffffff",
+          hoverOffset: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "75%",
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: isDark ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.95)",
+          titleColor: isDark ? "#ffffff" : "#0f172a",
+          bodyColor: isDark ? "#cbd5e1" : "#334155",
+          borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)",
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 12,
+          callbacks: {
+            label: function (ctx) {
+              const val = ctx.parsed || 0;
+              const pct = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : 0;
+              return ` $${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Donut center summary
+  if (sectors.length > 0) {
+    const top = sectors[0];
+    const centerSector = document.getElementById("donut-center-sector");
+    const centerPct = document.getElementById("donut-center-pct");
+    if (centerSector) centerSector.textContent = top.sector;
+    if (centerPct) centerPct.textContent = `${top.weight_pct}%`;
+  }
+
+  // Concentration Risk Badge & HHI Box
+  if (concentrationRisk) {
+    const riskBadge = document.getElementById("concentration-risk-badge");
+    const riskText = document.getElementById("concentration-risk-text");
+    const hhiVal = document.getElementById("concentration-hhi-val");
+    const warningText = document.getElementById("concentration-warning-text");
+
+    if (riskText) riskText.textContent = concentrationRisk.risk_level;
+    if (hhiVal) hhiVal.textContent = Math.round(concentrationRisk.hhi).toLocaleString();
+    if (warningText) warningText.textContent = concentrationRisk.warning_message;
+
+    if (riskBadge) {
+      if (concentrationRisk.risk_color === "rose") {
+        riskBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center space-x-1.5 self-start sm:self-auto";
+      } else if (concentrationRisk.risk_color === "amber") {
+        riskBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5 self-start sm:self-auto";
+      } else {
+        riskBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center space-x-1.5 self-start sm:self-auto";
+      }
+    }
+  }
+
+  // Sector Breakdown Rows List
+  const breakdownList = document.getElementById("sector-breakdown-list");
+  if (breakdownList) {
+    breakdownList.innerHTML = "";
+    sectors.forEach((sec, idx) => {
+      const color = colors[idx % colors.length];
+      const row = document.createElement("div");
+      row.className = "p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.05] space-y-1.5";
+      row.innerHTML = `
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></span>
+            <span class="font-semibold text-slate-800 dark:text-slate-200">${escapeHtml(sec.sector)}</span>
+            <span class="text-[10px] text-slate-400">(${sec.count} ${sec.count === 1 ? 'position' : 'positions'})</span>
+          </div>
+          <div class="flex items-center space-x-3 font-mono">
+            <span class="font-bold text-slate-900 dark:text-white privacy-value">$${sec.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            <span class="text-indigo-500 font-bold">${sec.weight_pct}%</span>
+          </div>
+        </div>
+        <div class="w-full h-1.5 rounded-full bg-black/5 dark:bg-white/5 overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-500" style="width: ${sec.weight_pct}%; background-color: ${color}"></div>
+        </div>
+      `;
+      breakdownList.appendChild(row);
+    });
+  }
+}
+
+/**
+ * Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
+ */
+let currentOptimizationData = null;
+let selectedOptimizerProfile = "balanced";
+
+function renderPortfolioOptimizer(optData, currentVal) {
+  currentOptimizationData = optData;
+  updateOptimizerProfileView(optData, currentVal);
+}
+
+function updateOptimizerProfileView(optData, currentVal) {
+  if (!optData || !optData.profiles) return;
+  const profile = optData.profiles[selectedOptimizerProfile] || optData.profiles["balanced"];
+  if (!profile) return;
+
+  const curMetrics = optData.current_metrics || {};
+
+  // Sharpe comparison
+  const curSharpe = curMetrics.sharpe_ratio !== undefined ? curMetrics.sharpe_ratio : 0;
+  const tgtSharpe = profile.sharpe_ratio !== undefined ? profile.sharpe_ratio : 0;
+  const curSharpeElem = document.getElementById("opt-current-sharpe");
+  const tgtSharpeElem = document.getElementById("opt-target-sharpe");
+  const sharpeDeltaElem = document.getElementById("opt-sharpe-delta");
+
+  if (curSharpeElem) curSharpeElem.textContent = curSharpe.toFixed(2);
+  if (tgtSharpeElem) tgtSharpeElem.textContent = tgtSharpe.toFixed(2);
+  if (sharpeDeltaElem) {
+    const diff = tgtSharpe - curSharpe;
+    const sign = diff >= 0 ? "+" : "";
+    sharpeDeltaElem.textContent = `${sign}${diff.toFixed(2)} Sharpe Improvement (${profile.name})`;
+    sharpeDeltaElem.className = diff >= 0 ? "text-[11px] font-semibold text-emerald-500" : "text-[11px] font-semibold text-rose-500";
+  }
+
+  // Volatility comparison
+  const curVol = curMetrics.annual_volatility_pct !== undefined ? curMetrics.annual_volatility_pct : 0;
+  const tgtVol = profile.annual_volatility_pct !== undefined ? profile.annual_volatility_pct : 0;
+  const curVolElem = document.getElementById("opt-current-vol");
+  const tgtVolElem = document.getElementById("opt-target-vol");
+  const volDeltaElem = document.getElementById("opt-vol-delta");
+
+  if (curVolElem) curVolElem.textContent = `${curVol.toFixed(1)}%`;
+  if (tgtVolElem) tgtVolElem.textContent = `${tgtVol.toFixed(1)}%`;
+  if (volDeltaElem) {
+    const diff = tgtVol - curVol;
+    const sign = diff >= 0 ? "+" : "";
+    const isGood = diff <= 0;
+    volDeltaElem.textContent = `${sign}${diff.toFixed(1)}% Volatility Shift`;
+    volDeltaElem.className = isGood ? "text-[11px] font-semibold text-cyan-500" : "text-[11px] font-semibold text-amber-500";
+  }
+
+  // Return comparison
+  const curRet = curMetrics.expected_annual_return_pct !== undefined ? curMetrics.expected_annual_return_pct : 0;
+  const tgtRet = profile.expected_annual_return_pct !== undefined ? profile.expected_annual_return_pct : 0;
+  const curRetElem = document.getElementById("opt-current-ret");
+  const tgtRetElem = document.getElementById("opt-target-ret");
+  const retDeltaElem = document.getElementById("opt-ret-delta");
+
+  if (curRetElem) curRetElem.textContent = `${curRet.toFixed(1)}%`;
+  if (tgtRetElem) tgtRetElem.textContent = `${tgtRet.toFixed(1)}%`;
+  if (retDeltaElem) {
+    const diff = tgtRet - curRet;
+    const sign = diff >= 0 ? "+" : "";
+    retDeltaElem.textContent = `${sign}${diff.toFixed(1)}% Annual Alpha`;
+    retDeltaElem.className = diff >= 0 ? "text-[11px] font-semibold text-indigo-500" : "text-[11px] font-semibold text-slate-400";
+  }
+
+  // Rebalancing trades table
+  const tbody = document.getElementById("rebalancing-tbody");
+  const summaryElem = document.getElementById("rebalance-status-summary");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const trades = profile.rebalancing_trades || [];
+  if (summaryElem) {
+    const activeMoves = trades.filter((t) => t.action !== "Hold").length;
+    summaryElem.textContent = `${activeMoves} trade recommendations for ${profile.name}`;
+  }
+
+  trades.forEach((t) => {
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition";
+
+    let actionBadgeClass = "bg-slate-500/10 text-slate-400 border-slate-500/20";
+    if (t.action === "Increase") actionBadgeClass = "bg-emerald-500/15 text-emerald-500 border-emerald-500/30 font-bold";
+    if (t.action === "Reduce") actionBadgeClass = "bg-amber-500/15 text-amber-500 border-amber-500/30 font-bold";
+
+    const shiftSign = t.weight_delta_pct >= 0 ? "+" : "";
+    const dollarSign = t.dollar_delta >= 0 ? "+" : "-";
+
+    tr.innerHTML = `
+      <td class="py-2.5 px-4 font-bold text-slate-900 dark:text-white uppercase">${escapeHtml(t.ticker)}</td>
+      <td class="py-2.5 px-4 text-right text-slate-500 dark:text-slate-400">${t.current_weight_pct.toFixed(1)}%</td>
+      <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400">${t.target_weight_pct.toFixed(1)}%</td>
+      <td class="py-2.5 px-4 text-right font-semibold ${t.weight_delta_pct >= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+        ${shiftSign}${t.weight_delta_pct.toFixed(1)}%
+      </td>
+      <td class="py-2.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-white privacy-value">
+        ${dollarSign}$${Math.abs(t.dollar_delta).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+      </td>
+      <td class="py-2.5 px-4 text-center">
+        <span class="text-[10px] px-2 py-0.5 rounded-full border uppercase ${actionBadgeClass}">
+          ${t.action}
+        </span>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/**
+ * Macro Stress-Testing & Market Crash Simulator
+ */
+let currentStressTestData = null;
+let currentStressPortfolioValue = 0;
+
+function renderMacroStressTest(stressData, currentVal) {
+  currentStressTestData = stressData;
+  currentStressPortfolioValue = currentVal;
+
+  const betaBadge = document.getElementById("portfolio-beta-badge");
+  if (betaBadge && stressData.portfolio_beta !== undefined) {
+    betaBadge.textContent = `Portfolio Beta: ${stressData.portfolio_beta.toFixed(2)}x (SPY)`;
+  }
+
+  const grid = document.getElementById("stress-scenarios-grid");
+  if (grid && Array.isArray(stressData.scenarios)) {
+    grid.innerHTML = "";
+    stressData.scenarios.forEach((sc) => {
+      const card = document.createElement("div");
+      let colorClass = "border-amber-500/30 hover:border-amber-500/50";
+      let badgeClass = "bg-amber-500/15 text-amber-500 border-amber-500/30";
+      if (sc.color === "rose") {
+        colorClass = "border-rose-500/30 hover:border-rose-500/50";
+        badgeClass = "bg-rose-500/15 text-rose-500 border-rose-500/30";
+      } else if (sc.color === "emerald") {
+        colorClass = "border-emerald-500/30 hover:border-emerald-500/50";
+        badgeClass = "bg-emerald-500/15 text-emerald-500 border-emerald-500/30";
+      } else if (sc.color === "cyan") {
+        colorClass = "border-cyan-500/30 hover:border-cyan-500/50";
+        badgeClass = "bg-cyan-500/15 text-cyan-500 border-cyan-500/30";
+      }
+
+      const dollarSign = sc.dollar_change >= 0 ? "+" : "-";
+      const impactSign = sc.portfolio_impact_pct >= 0 ? "+" : "";
+
+      card.className = `p-4 rounded-2xl apple-glass border ${colorClass} space-y-2 cursor-pointer transition hover:scale-[1.02] shadow-sm`;
+      card.setAttribute("title", `Click to simulate ${sc.market_shock_pct}% shock`);
+      card.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(sc.name)}</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border ${badgeClass}">
+            ${sc.market_shock_pct > 0 ? '+' : ''}${sc.market_shock_pct}%
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">${escapeHtml(sc.description)}</p>
+        <div class="pt-1 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs font-mono">
+          <span class="text-slate-400">Projected:</span>
+          <span class="font-bold ${sc.dollar_change >= 0 ? 'text-emerald-500' : 'text-rose-500'} privacy-value">
+            ${dollarSign}$${Math.abs(sc.dollar_change).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${impactSign}${sc.portfolio_impact_pct.toFixed(1)}%)
+          </span>
+        </div>
+      `;
+
+      card.addEventListener("click", () => {
+        const slider = document.getElementById("macro-shock-slider");
+        if (slider) {
+          slider.value = sc.market_shock_pct;
+          updateSliderShockReadout(sc.market_shock_pct);
+        }
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  // Update slider with current value
+  const slider = document.getElementById("macro-shock-slider");
+  if (slider) {
+    updateSliderShockReadout(parseFloat(slider.value) || 0);
+  }
+}
+
+function updateSliderShockReadout(shockPct) {
+  const beta = currentStressTestData && currentStressTestData.portfolio_beta ? currentStressTestData.portfolio_beta : 1.0;
+  const currVal = currentStressPortfolioValue > 0 ? currentStressPortfolioValue : (portfolioForecastData ? portfolioForecastData.current_portfolio_value : 0);
+
+  const impliedImpactPct = shockPct * beta;
+  const dollarChange = currVal * (impliedImpactPct / 100);
+  const stressedVal = currVal + dollarChange;
+
+  const shockLabel = document.getElementById("slider-shock-pct-label");
+  const impactPctElem = document.getElementById("slider-portfolio-impact-pct");
+  const dollarImpactElem = document.getElementById("slider-dollar-impact");
+  const stressedValElem = document.getElementById("slider-stressed-val");
+
+  const sign = shockPct > 0 ? "+" : "";
+  if (shockLabel) {
+    shockLabel.textContent = `${sign}${shockPct.toFixed(1)}%`;
+    if (shockPct > 0) shockLabel.className = "text-sm font-extrabold text-emerald-500 font-mono";
+    else if (shockPct < 0) shockLabel.className = "text-sm font-extrabold text-rose-500 font-mono";
+    else shockLabel.className = "text-sm font-extrabold text-indigo-500 font-mono";
+  }
+
+  const impSign = impliedImpactPct > 0 ? "+" : "";
+  if (impactPctElem) {
+    impactPctElem.textContent = `${impSign}${impliedImpactPct.toFixed(1)}%`;
+    impactPctElem.className = impliedImpactPct >= 0 ? "text-base font-bold text-emerald-500" : "text-base font-bold text-rose-500";
+  }
+
+  const dSign = dollarChange >= 0 ? "+" : "-";
+  if (dollarImpactElem) {
+    dollarImpactElem.textContent = `${dSign}$${Math.abs(dollarChange).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    dollarImpactElem.className = dollarChange >= 0 ? "text-base font-bold text-emerald-500 privacy-value" : "text-base font-bold text-rose-500 privacy-value";
+  }
+
+  if (stressedValElem) {
+    stressedValElem.textContent = `$${Math.max(0, stressedVal).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  }
 }
 
 /**
