@@ -1,30 +1,67 @@
-# StockCast ML: Personal Stock Price Forecasting Application
+# StockCast ML: Institutional-Grade Stock & Portfolio Price Forecasting Application
 
-An intelligent stock price forecasting web application powered by **Alpaca Market Data API (v2)**, **Machine Learning** (Quantile Gradient Boosted Trees, Regularized Ridge Regression, Long-Term Trend & Volatility Diffusion, and Blended Ensembles), and a modern dark-mode interactive dashboard.
+An advanced quantitative forecasting and portfolio risk intelligence platform powered by **Alpaca Market Data API (v2)**, **Machine Learning** (Quantile Gradient Boosted Trees, Regularized Ridge Regression, Geometric Volatility Diffusion, and Blended Ensembles), **Modern Portfolio Theory (MPT)**, **Real-Time Financial NLP Sentiment Analysis**, and a responsive Apple-glass interactive dashboard.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Comprehensive Feature Suite
 
-1. **Alpaca Market Data v2 Integration**:
-   - Ingests **3 years of daily historical bars** (750+ trading sessions: Open, High, Low, Close, Volume, VWAP).
-   - Retrieves **live market quotes** and snapshot changes during market hours.
-2. **Machine Learning Forecasting Suite**:
-   - **Gradient Boosted Trees (GBDT)**: Pinball quantile loss regressors predicting 10th percentile (Min), 50th percentile (Mean), and 90th percentile (Max) paths.
-   - **Ridge Regression**: L2-regularized linear baseline with residual variance uncertainty bounds.
-   - **Blended Ensemble**: Consensus stacking combining GBDT and Ridge for maximal regime stability.
-3. **Dual-Horizon Forecasting**:
-   - **Next 30 Days (Daily Horizon)**:
-     - Predicted daily trajectory connecting directly to historical closes.
-     - 30-Day aggregate summary: **Min Price**, **Max Price**, **Mean Price**, and Expected ROI %.
-   - **Next 3 Years (Monthly Horizon - 36 Months)**:
-     - Monthly aggregated trend drift and volatility diffusion cones.
-     - Year 1, Year 2, and Year 3 summary projections + 3-year projected CAGR.
-     - Interactive 36-month table with sortable columns for Monthly Min, Mean, Max, and Volatility Spread.
-4. **Interactive Dashboard**:
-   - Instant search for any US ticker (`AAPL`, `NVDA`, `TSLA`, `MSFT`, `SPY`, etc.).
-   - Model selector tabs allowing instant toggling between Ensemble, GBDT, and Ridge without re-fetching.
-   - High-performance financial charts built with Chart.js.
+### 1. 📐 Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
+* **Markowitz Mean-Variance SLSQP Solver**: Calculates the optimal risk-return weights along the Markowitz Efficient Frontier.
+* **Three Selectable Strategy Profiles**:
+  * **Balanced (Max Sharpe Ratio)**: Maximizes risk-adjusted excess returns per unit of volatility ($\text{Sharpe} = \frac{R_p - R_f}{\sigma_p}$).
+  * **Conservative (Minimum Volatility)**: Minimizes portfolio variance ($\sigma_p$) and capital drawdowns.
+  * **Aggressive (Growth / Return-Seeking)**: Overweights top-momentum growth assets within bounded diversification constraints.
+* **Automated Trade Suggestions**: Day-by-day and dollar-by-dollar rebalancing recommendations with explicit "Increase", "Reduce", or "Hold" trade actions.
+
+### 2. 📰 Real-Time AI News & Financial NLP Sentiment Analysis
+* **Live Market Wires**: Directly ingests real-time breaking market news via Alpaca's news stream.
+* **Quantitative Financial NLP Lexicon**: Scores headlines and summaries from **-100 (Very Bearish)** to **+100 (Very Bullish)** using institutional finance sentiment dictionaries.
+* **Catalyst & Trigger Extraction**: Highlights positive and negative keyword triggers (e.g. *earnings beat, breakout, upgrade, inflation, subpoena*).
+* **Wire Previews & Polarity Badges**: Displays article summaries, timestamps, sources (Benzinga, MarketWire), and direct external links.
+
+### 3. ⚡ Macro Stress-Testing & Market Crash Simulator
+* **CAPM Beta Modeling**: Computes individual holding and aggregate portfolio Betas ($\beta$) against the S&P 500 benchmark (`SPY`).
+* **Pre-Built Systemic Shock Scenarios**:
+  * 📉 **S&P 500 Market Correction (-10%)**
+  * 🐻 **Severe Recession / Tech Crash (-20%)**
+  * 🚀 **Growth & AI Expansion Bull Surge (+15%)**
+  * 🏦 **Fed Rate Cut Easing / Soft Landing (+6%)**
+* **Interactive Shock Slider**: Test custom macroeconomic shocks anywhere from **-30% to +30%** with instantaneous live calculations of portfolio dollar impact, percentage change, and stressed valuation.
+
+### 4. 🍩 Sector Allocation Donut Chart & Concentration Risk Guardrail
+* **Interactive Chart.js Donut**: Visualizes exact distribution across Technology, Semiconductors, Financials, Healthcare, Consumer Discretionary, etc.
+* **Herfindahl-Hirschman Index (HHI)**: Computes quantitative market concentration ($HHI = \sum w_i^2$) and provides guardrail warnings (*Optimal Diversification*, *Moderate Concentration*, or *High Concentration Alert*) to protect against over-allocation.
+
+### 5. 🛡️ Critical Support Floor Alerts & Breakout Levels
+* **Downside Floor Defense**: Computes empirical 99% critical support floors on both individual equities and composite portfolios.
+* **Buffer & Cushion Metrics**: Displays dollar distance and percentage downside cushion to notify investors before key technical support breaks.
+* **Chart Integration**: Shaded red support line toggleable directly on both the 30-Day and 3-Year forecast charts.
+
+### 6. 📅 Earnings Catalyst & Event Milestone Tracker
+* **Upcoming Earnings Tracker**: Displays next projected earnings report dates and countdowns directly on the stock overview banner.
+* **Volatility Expectations**: Highlights historical post-earnings move percentages and implied options straddle moves.
+
+### 7. 📄 1-Click Institutional PDF Investment Memorandum
+* **Executive Print Engine**: Clean `@media print` CSS rules transform the interactive dashboard into a clean, 2-column institutional PDF memorandum.
+* **Confidentiality & Compliance**: Auto-renders header logos, disclaimers, date stamps, and structured tables while hiding web navigation controls.
+
+### 8. 💼 Owned Stocks Dedicated Portfolio Page (`/portfolio`)
+* **Aggregate Forecasting**: Computes composite 60-day daily trajectories and 3-year multi-year monthly CAGR across all owned positions.
+* **Zero Remote Database**: Portfolio positions are stored **100% locally in your browser**.
+* **Client-Side AES-256-GCM Vault**: Optional PIN lock encrypts holdings using PBKDF2 with 100,000 iterations.
+* **Privacy Shield Mask**: Toggleable one-click balance blur for shoulder-surfing protection in public.
+* **Position Management**: Edit quantities, record partial buys/sells with weighted cost-basis recalculation, and export/import JSON backups or CSVs.
+
+### 9. 🚀 Automatic Live Pre-IPO & Asset Discovery (e.g. Anthropic, Stripe)
+* **Dynamic Alpaca Asset Sync**: Synchronizes with Alpaca's active asset registry on startup to discover newly listed IPOs the day they debut.
+* **Pre-IPO Synthetic Padding**: Prevents "insufficient data" errors on newly listed equities (< 50 bars) via price-discovery baseline padding.
+
+### 10. 🤖 Multi-Model Machine Learning Suite
+* **Quantile Gradient Boosted Trees (GBDT)**: Pinball quantile loss regressors predicting 10th percentile (Min), 50th percentile (Mean), and 90th percentile (Max) envelopes.
+* **Regularized Ridge Regression**: L2-penalized baseline model with analytical variance intervals.
+* **Blended Ensemble**: Adaptive stacking blending GBDT and Ridge for optimal out-of-sample stability.
+* **Multi-Horizon Diffusion**: 30-day continuous daily forecasts and 36-month geometric trend drift.
 
 ---
 
@@ -32,40 +69,45 @@ An intelligent stock price forecasting web application powered by **Alpaca Marke
 
 ```mermaid
 flowchart TD
-    User["Browser (http://127.0.0.1:8000)"]
+    User["User Browser"]
     
-    subgraph Frontend ["Frontend UI (frontend/)"]
-        Dashboard["Interactive Dashboard (Tailwind + Lucide)"]
-        Chart30["30-Day Daily Chart (Historical + Min/Max/Mean)"]
-        Chart3Y["3-Year Monthly Chart (36 Months Diffusion Cones)"]
-        Table36["36-Month Data Table"]
+    subgraph Frontend ["Frontend UI (Tailwind CSS + Lucide + Chart.js)"]
+        SingleStock["Single Stock Dashboard (/)"]
+        PortfolioDash["Portfolio Dashboard (/portfolio)"]
+        SectorDonut["Sector Allocation & HHI Donut"]
+        OptimizerUI["MPT Optimizer & Rebalancing Tabs"]
+        SimulatorUI["Macro Shock Slider & Crash Cards"]
+        NewsUI["Live AI News & NLP Sentiment"]
+        PDFExport["Institutional PDF Memo Engine"]
+        VaultSec["AES-256-GCM Local Vault"]
     end
     
-    subgraph Backend ["FastAPI Backend (backend/app/)"]
-        API["FastAPI REST Endpoints (main.py)"]
-        Alpaca["Alpaca Client (alpaca_client.py)"]
-        Features["Feature Engineering Engine (feature_builder.py)"]
-        
-        subgraph ML ["ML Models (backend/app/models/)"]
-            GBDT["Quantile GBDT (gbdt_model.py)"]
-            Ridge["L2 Ridge Regression (ridge_model.py)"]
-            Ensemble["Blended Ensemble (ensemble.py)"]
-            LongTerm["3-Year Monthly Diffusion (long_term_model.py)"]
-        end
+    subgraph Backend ["FastAPI Application (backend/app/)"]
+        Router["REST Endpoints (main.py)"]
+        ForecastSvc["Forecast Service (forecast_service.py)"]
+        OptimizerEngine["MPT Optimizer & Beta Solver (portfolio_optimizer.py)"]
+        SentimentSvc["NLP Sentiment Engine (sentiment_service.py)"]
+        FeatureEng["Feature Builder - RSI, MACD, SMA (feature_builder.py)"]
+        MLModels["GBDT, Ridge & Diffusion Ensemble (models/)"]
+        CompanyDB["Company & Sector Database (company_database.py)"]
+        AlpacaClient["Alpaca Market Data v2 Client (alpaca_client.py)"]
     end
     
-    AlpacaAPI["Alpaca Market Data API (data.alpaca.markets/v2)"]
+    AlpacaAPI["Alpaca Markets API (data.alpaca.markets)"]
 
-    User <--> Dashboard
-    Dashboard --> API
-    API --> Alpaca
-    Alpaca <--> AlpacaAPI
-    Alpaca --> Features
-    Features --> ML
-    ML --> API
-    API --> Chart30
-    API --> Chart3Y
-    API --> Table36
+    User <--> SingleStock
+    User <--> PortfolioDash
+    SingleStock --> Router
+    PortfolioDash --> Router
+    Router --> ForecastSvc
+    Router --> OptimizerEngine
+    Router --> SentimentSvc
+    ForecastSvc --> FeatureEng
+    FeatureEng --> MLModels
+    ForecastSvc --> AlpacaClient
+    OptimizerEngine --> AlpacaClient
+    SentimentSvc --> AlpacaAPI
+    AlpacaClient <--> AlpacaAPI
 ```
 
 ---
@@ -76,67 +118,92 @@ flowchart TD
 stock-forecast/
 ├── backend/
 │   ├── app/
-│   │   ├── config.py              # Environment variables, Alpaca URLs, reload logic
 │   │   ├── alpaca_client.py       # Alpaca Market Data v2 client with IEX feed & cache
-│   │   ├── feature_builder.py     # RSI, MACD, Moving Averages, Bollinger, Volatility, Lags
-│   │   ├── models/
-│   │   │   ├── gbdt_model.py      # Quantile HistGradientBoostingRegressor (10%, 50%, 90%)
-│   │   │   ├── ridge_model.py     # L2 Regularized Ridge with residual standard error
-│   │   │   ├── long_term_model.py # 3-Year Monthly trend drift & volatility cones
-│   │   │   └── ensemble.py        # Consensus weighted blending
-│   │   ├── forecast_service.py    # Pipeline coordinator & response formatter
-│   │   └── main.py                # FastAPI routes, CORS, static file serving
+│   │   ├── company_database.py    # Sector mapping, IPO sync, and ticker autocomplete
+│   │   ├── config.py              # Environment variables, Alpaca credentials, reload config
+│   │   ├── feature_builder.py     # RSI, MACD, SMA, Bollinger, Volatility, Lags
+│   │   ├── forecast_service.py    # Pipeline coordinator (Single stock & Portfolio aggregation)
+│   │   ├── main.py                # FastAPI endpoints, CORS, static routes, health checks
+│   │   ├── portfolio_optimizer.py # Markowitz SLSQP solver, CAPM Betas & Macro Stress tests
+│   │   ├── sentiment_service.py   # Alpaca live news API & financial NLP sentiment engine
+│   │   └── models/
+│   │       ├── gbdt_model.py      # Quantile HistGradientBoostingRegressor (10%, 50%, 90%)
+│   │       ├── ridge_model.py     # L2 Regularized Ridge with residual standard error
+│   │       ├── long_term_model.py # 3-Year Monthly trend drift & volatility cones
+│   │       └── ensemble.py        # Consensus weighted blending
 ├── frontend/
-│   ├── index.html                 # Sleek dark-mode dashboard
-│   ├── app.js                     # State management, Chart.js multi-series alignment
-│   └── style.css                  # Custom glassmorphism, glowing badges, scrollbars
-├── .env                           # Private Alpaca API credentials (never committed)
+│   ├── index.html                 # Sleek single stock dashboard with news sentiment & PDF export
+│   ├── portfolio.html             # Dedicated portfolio manager with sector donut, MPT & simulator
+│   ├── app.js                     # Single stock UI interactions, Chart.js instances, live sync
+│   ├── portfolio.js               # Portfolio calculations, AES vault, MPT tabs, crash slider
+│   └── style.css                  # Apple-glass design, glowing badges, print stylesheet
+├── Dockerfile                     # Production container spec (Python 3.14 + Uvicorn)
+├── railway.json                   # Railway deployment configuration
+├── requirements.txt               # Backend Python dependencies
 ├── .env.example                   # Template environment file
-├── requirements.txt               # Backend dependencies
-└── IMPLEMENTATION_PLAN.md         # Full project architectural roadmap
+└── README.md                      # Comprehensive application documentation
 ```
+
+---
+
+## 📡 REST API Reference
+
+| Endpoint | Method | Description |
+| :--- | :---: | :--- |
+| `/api/stock/{ticker}/forecast?model={model}` | `GET` | 30-day and 3-year ML forecasts, support floors, earnings catalyst, and news sentiment for a ticker. |
+| `/api/stock/{ticker}/news` | `GET` | Live Alpaca breaking news wire, NLP sentiment score (-100 to +100), and top catalyst triggers. |
+| `/api/search?q={query}` | `GET` | Real-time autocomplete searching company names and tickers. |
+| `/api/portfolio/forecast` | `POST` | Aggregated 60-day & 3-year portfolio forecast, sector donut, concentration risk, and MPT optimization. |
+| `/api/portfolio/optimize` | `POST` | Computes Markowitz Efficient Frontier weights for Conservative, Balanced, or Aggressive profiles. |
+| `/api/portfolio/stress-test` | `POST` | Simulates custom S&P 500 macro shocks (-30% to +30%) on portfolio equity using holding Betas. |
+| `/api/health` | `GET` | System health check and US market session status (Pre-Market, Regular, After-Hours, Closed). |
 
 ---
 
 ## 🚀 Running Locally
 
-The local server is already running! To start or restart it at any time:
-
 ```bash
-# 1. Activate the virtual environment
+# 1. Clone the repository
+git clone https://github.com/nik-khurana/stock-forecast.git
+cd stock-forecast
+
+# 2. Create and activate a Python virtual environment
+python3 -m venv venv
 source venv/bin/activate
 
-# 2. Run the FastAPI server with hot-reload
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Set up environment variables (.env)
+cp .env.example .env
+# Edit .env with your Alpaca API credentials:
+# ALPACA_API_KEY_ID=your_key_id
+# ALPACA_API_SECRET_KEY=your_secret_key
+
+# 5. Start the FastAPI development server
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Open your browser to:
-**[http://127.0.0.1:8000](http://127.0.0.1:8000)**
+* Single Stock Dashboard: **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
+* Portfolio Dashboard: **[http://127.0.0.1:8000/portfolio](http://127.0.0.1:8000/portfolio)**
 
 ---
 
-## ☁️ Free Deployment Guide (Vercel + Hugging Face / Render)
+## ☁️ Production Deployment
 
-To deploy this application 100% free:
+### Deploying to Railway
+This project is configured with a production [`Dockerfile`](file:///Users/nikhil/Desktop/stock-forecast/Dockerfile) and [`railway.json`](file:///Users/nikhil/Desktop/stock-forecast/railway.json).
+1. Link your GitHub repository in the [Railway Dashboard](https://railway.app).
+2. Set Environment Variables:
+   * `ALPACA_API_KEY_ID`: Your Alpaca API Key ID
+   * `ALPACA_API_SECRET_KEY`: Your Alpaca Secret Key
+   * `PORT`: `8000` (auto-bound by Railway)
+3. Deploy! Railway will automatically build the Docker container and route incoming HTTPS traffic.
 
-### 1. Deploy Backend (FastAPI on Hugging Face Spaces or Render)
-- **Hugging Face Spaces (Recommended - 100% Free)**:
-  1. Create a free account on [huggingface.co](https://huggingface.co).
-  2. Create a new Space with the **Docker** SDK.
-  3. Upload the `backend/` folder and `requirements.txt`.
-  4. In Space Settings $\to$ Variables and Secrets, add:
-     - `ALPACA_API_KEY_ID`: Your Alpaca Key ID
-     - `ALPACA_API_SECRET_KEY`: Your Alpaca Secret Key
-  5. Your backend will have a free, live HTTPS URL (e.g., `https://your-user-stockcast.hf.space`).
-- **Render.com**:
-  1. Create a free Web Service on [render.com](https://render.com).
-  2. Connect your GitHub repository.
-  3. Set Build Command: `pip install -r requirements.txt`
-  4. Set Start Command: `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
-  5. Add your Alpaca environment variables.
+---
 
-### 2. Deploy Frontend (Vercel or Netlify)
-1. Push the `frontend/` folder to GitHub or deploy via Vercel CLI.
-2. In `frontend/app.js`, update the API base URL to point to your live backend URL (or use environment variables).
-3. Connect your repository to Vercel/Netlify for instant global CDN hosting.
-
+## 🔒 Security & Privacy Notice
+* **Local Data Isolation**: Financial positions entered on `/portfolio` are stored locally in your browser's `localStorage` and never persisted to an external database.
+* **Zero Tracking**: Calculations run in transient server memory and are immediately discarded.
+* **Paper Credentials**: Works seamlessly with free Alpaca Paper Trading API keys.
