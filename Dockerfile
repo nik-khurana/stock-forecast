@@ -26,6 +26,7 @@ COPY frontend/ /app/frontend/
 COPY your_application/ /app/your_application/
 COPY wsgi.py /app/wsgi.py
 COPY Procfile /app/Procfile
+COPY main.py /app/main.py
 COPY README.md /app/README.md
 
 # Ensure non-root appuser permissions (required for Hugging Face Spaces & security best practices)
@@ -36,5 +37,5 @@ USER appuser
 # Expose ports (7860 for Hugging Face, 8000 default, overridden by Railway/Render $PORT)
 EXPOSE 7860 8000 8080
 
-# Start Uvicorn server dynamically binding to platform $PORT (defaults to 7860 for HF, $PORT for Railway)
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
+# Start production server via main.py (safely handles any $PORT or non-numeric port strings)
+CMD ["python", "main.py"]

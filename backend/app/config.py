@@ -18,14 +18,13 @@ ENV_PATH = BASE_DIR / ".env"
 
 def reload_env():
     """
-    Reloads environment variables from the .env file.
-    Using `override=True` ensures that any newly added keys or edits
-    to `.env` take immediate effect without needing a complete process restart.
+    Loads environment variables from .env file without overriding
+    platform-injected system variables like $PORT on Railway/Render.
     """
     if ENV_PATH.exists():
-        load_dotenv(dotenv_path=ENV_PATH, override=True)
+        load_dotenv(dotenv_path=ENV_PATH, override=False)
     else:
-        load_dotenv(override=True)
+        load_dotenv(override=False)
 
 # Initial environment load on module import
 reload_env()
@@ -62,9 +61,10 @@ def get_alpaca_data_url() -> str:
         return "https://data.alpaca.markets/v2"
     return url
 
-# Server host & port configuration
-HOST = os.getenv("HOST", "127.0.0.1")
-PORT = int(os.getenv("PORT", "8000"))
+# Server host & port configuration (default to 0.0.0.0 for Docker/Railway/Render compatibility)
+HOST = os.getenv("HOST", "0.0.0.0")
+raw_port = os.getenv("PORT", "8000").strip()
+PORT = int(raw_port) if raw_port.isdigit() else 8000
 
 # Production CORS Security: comma-separated origins (default '*' for local development)
 ALLOWED_ORIGINS = [
