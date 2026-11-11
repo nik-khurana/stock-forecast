@@ -821,9 +821,11 @@ class ForecastService:
 
         # Step 7: Sector Allocation & Concentration Risk Evaluation
         sector_totals = {}
+        sector_counts = {}
         for item in holdings_breakdown:
             sec = item.get("sector", "Diversified Equities")
-            sector_totals[sec] = sector_totals.get(sec, 0.0) + item["current_value"]
+            sector_totals[sec] = sector_totals.get(sec, 0.0) + item.get("current_value", 0.0)
+            sector_counts[sec] = sector_counts.get(sec, 0) + 1
 
         sector_allocation = []
         for sec, s_val in sector_totals.items():
@@ -831,6 +833,8 @@ class ForecastService:
             sector_allocation.append({
                 "sector": sec,
                 "total_value": round(s_val, 2),
+                "value": round(s_val, 2),
+                "count": sector_counts.get(sec, 1),
                 "weight_pct": s_pct,
             })
         sector_allocation.sort(key=lambda x: x["weight_pct"], reverse=True)

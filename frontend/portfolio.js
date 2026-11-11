@@ -65,6 +65,33 @@ function getFormattedETTime(dateObj = new Date()) {
 }
 
 /**
+ * Defensive number formatting utilities to completely avoid "Cannot read properties of undefined (reading 'toLocaleString')".
+ */
+function safeMoney(val, decimals = 2) {
+  if (val === null || val === undefined) return "0.00";
+  const num = typeof val === "number" ? val : parseFloat(val);
+  if (isNaN(num)) return "0.00";
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+}
+
+function safeInt(val) {
+  if (val === null || val === undefined) return "0";
+  const num = typeof val === "number" ? val : parseFloat(val);
+  if (isNaN(num)) return "0";
+  return Math.round(num).toLocaleString();
+}
+
+function safeFixed(val, decimals = 2) {
+  if (val === null || val === undefined) return "0.00";
+  const num = typeof val === "number" ? val : parseFloat(val);
+  if (isNaN(num)) return "0.00";
+  return num.toFixed(decimals);
+}
+
+/**
  * Smooth Apple/Robinhood-Style Rolling Number Count-Up Animation
  */
 function animateValue(elem, start, end, duration = 800, formatter = (v) => v.toFixed(2)) {
@@ -223,9 +250,7 @@ function updateMarketClock() {
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
-  if (window.lucide) {
-    lucide.createIcons();
-  }
+  triggerLucideIcons();
 
   initPrivacyMask();
   loadPortfolioVault();
@@ -276,7 +301,7 @@ function showToast(message, type = "info") {
   `;
 
   container.appendChild(toast);
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
 
   requestAnimationFrame(() => {
     toast.classList.remove("opacity-0", "translate-y-2");
@@ -369,7 +394,7 @@ function initTheme() {
 
       const newIcon = isDark ? "moon" : "sun";
       if (themeIcon) themeIcon.setAttribute("data-lucide", newIcon);
-      if (window.lucide) lucide.createIcons();
+      triggerLucideIcons();
 
       if (portfolioForecastData) {
         renderPortfolio60dChart(portfolioForecastData.portfolio_60d_daily, portfolioForecastData.current_portfolio_value);
@@ -404,7 +429,7 @@ function applyPrivacyMask() {
 
   if (icon) {
     icon.setAttribute("data-lucide", isPrivacyMaskActive ? "eye-off" : "eye");
-    if (window.lucide) lucide.createIcons();
+    triggerLucideIcons();
   }
 }
 
@@ -1013,9 +1038,9 @@ function openEditPositionModal(index) {
   if (idxInput) idxInput.value = index;
   if (tickerInput) tickerInput.value = holding.ticker;
   if (sharesInput) sharesInput.value = holding.shares;
-  if (priceInput) priceInput.value = holding.buy_price.toFixed(2);
+  if (priceInput) priceInput.value = safeFixed(holding.buy_price, 2);
   if (costBasisElem) {
-    costBasisElem.textContent = `$${(holding.shares * holding.buy_price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    costBasisElem.textContent = `$${safeMoney((holding.shares || 0) * (holding.buy_price || 0))}`;
   }
 
   // Pre-fill Buy More / Sell Form
@@ -1034,7 +1059,7 @@ function openEditPositionModal(index) {
       liveQuotePrice = match.current_price;
     }
   }
-  if (adjustPriceInput) adjustPriceInput.value = liveQuotePrice.toFixed(2);
+  if (adjustPriceInput) adjustPriceInput.value = safeFixed(liveQuotePrice, 2);
 
   // Set default action to "buy" and mode to "direct"
   setEditMode("direct");
@@ -1046,7 +1071,7 @@ function openEditPositionModal(index) {
     tickerInput.focus();
     tickerInput.select();
   }
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
 }
 
 /**
@@ -1079,7 +1104,7 @@ function setEditMode(mode) {
     if (directForm) directForm.classList.add("hidden");
     updateAdjustPreview();
   }
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
 }
 
 /**
@@ -1110,7 +1135,7 @@ function setAdjustAction(action) {
     }
   }
   updateAdjustPreview();
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
 }
 
 /**
@@ -1122,7 +1147,7 @@ function updateDirectEditCostBasis() {
   const costBasis = shares * price;
   const el = document.getElementById("edit-new-cost-basis");
   if (el) {
-    el.textContent = `$${costBasis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    el.textContent = `$${safeMoney(costBasis)}`;
   }
 }
 
@@ -1133,19 +1158,19 @@ function updateAdjustPreview() {
   if (currentEditHoldingIndex < 0 || currentEditHoldingIndex >= portfolioHoldings.length) return;
   const holding = portfolioHoldings[currentEditHoldingIndex];
   const tradeShares = parseFloat(document.getElementById("adjust-shares-input").value) || 0;
-  const tradePrice = parseFloat(document.getElementById("adjust-price-input").value) || holding.buy_price;
+  const tradePrice = parseFloat(document.getElementById("adjust-price-input").value) || (holding.buy_price || 0);
 
-  let newShares = holding.shares;
-  let newAvgPrice = holding.buy_price;
-  let newCostBasis = holding.shares * holding.buy_price;
+  let newShares = holding.shares || 0;
+  let newAvgPrice = holding.buy_price || 0;
+  let newCostBasis = (holding.shares || 0) * (holding.buy_price || 0);
 
   if (currentAdjustAction === "buy") {
-    newShares = holding.shares + tradeShares;
-    newCostBasis = holding.shares * holding.buy_price + tradeShares * tradePrice;
+    newShares = (holding.shares || 0) + tradeShares;
+    newCostBasis = (holding.shares || 0) * (holding.buy_price || 0) + tradeShares * tradePrice;
     newAvgPrice = newShares > 0 ? newCostBasis / newShares : 0;
   } else {
-    newShares = Math.max(0, holding.shares - tradeShares);
-    newAvgPrice = holding.buy_price;
+    newShares = Math.max(0, (holding.shares || 0) - tradeShares);
+    newAvgPrice = holding.buy_price || 0;
     newCostBasis = newShares * newAvgPrice;
   }
 
@@ -1153,9 +1178,9 @@ function updateAdjustPreview() {
   const prevAvgElem = document.getElementById("adjust-preview-avg-price");
   const prevBasisElem = document.getElementById("adjust-preview-cost-basis");
 
-  if (prevSharesElem) prevSharesElem.textContent = `${newShares.toLocaleString()}`;
-  if (prevAvgElem) prevAvgElem.textContent = `$${newAvgPrice.toFixed(2)}`;
-  if (prevBasisElem) prevBasisElem.textContent = `$${newCostBasis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  if (prevSharesElem) prevSharesElem.textContent = `${safeInt(newShares)}`;
+  if (prevAvgElem) prevAvgElem.textContent = `$${safeFixed(newAvgPrice, 2)}`;
+  if (prevBasisElem) prevBasisElem.textContent = `$${safeMoney(newCostBasis)}`;
 }
 
 /**
@@ -1403,6 +1428,16 @@ function sortHoldings(order = "asc", save = true) {
   }
 }
 
+function triggerLucideIcons() {
+  if (typeof window !== "undefined" && window.lucide && typeof window.lucide.createIcons === "function") {
+    try {
+      window.lucide.createIcons();
+    } catch (e) {
+      // Ignore lucide rendering glitch
+    }
+  }
+}
+
 function updateSortHoldingsUI() {
   const label = document.getElementById("sort-holdings-az-label");
   const icon = document.getElementById("sort-holdings-az-icon");
@@ -1416,7 +1451,7 @@ function updateSortHoldingsUI() {
   if (colIcon) {
     colIcon.setAttribute("data-lucide", isAsc ? "arrow-down-a-z" : "arrow-up-z-a");
   }
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
 }
 
 /**
@@ -1452,9 +1487,11 @@ function renderHoldingsTable() {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition";
 
-    const costBasisNum = h.shares * h.buy_price;
-    let livePriceStr = `$${h.buy_price.toFixed(2)}`;
-    let currValStr = `$${costBasisNum.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const sharesNum = parseFloat(h.shares) || 0;
+    const buyPriceNum = parseFloat(h.buy_price) || 0;
+    const costBasisNum = sharesNum * buyPriceNum;
+    let livePriceStr = `$${safeFixed(buyPriceNum, 2)}`;
+    let currValStr = `$${safeMoney(costBasisNum)}`;
     let pnlStr = "$0.00 (0.00%)";
     let pnlColor = "text-slate-400";
     let weightStr = "...";
@@ -1464,23 +1501,25 @@ function renderHoldingsTable() {
     if (portfolioForecastData && portfolioForecastData.holdings_breakdown) {
       const match = portfolioForecastData.holdings_breakdown.find((item) => item.ticker === h.ticker);
       if (match) {
-        livePriceStr = `$${match.current_price.toFixed(2)}`;
-        currValStr = `$${match.current_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        const sign = match.pnl >= 0 ? "+" : "";
-        pnlStr = match.is_unlisted ? "$0.00 (0.00%)" : `${sign}$${match.pnl.toFixed(2)} (${sign}${match.pnl_pct.toFixed(2)}%)`;
-        pnlColor = match.is_unlisted ? "text-slate-400" : (match.pnl > 0 ? "text-emerald-500" : (match.pnl < 0 ? "text-rose-500" : "text-slate-400"));
-        weightStr = `${match.weight_pct}%`;
+        livePriceStr = `$${safeFixed(match.current_price, 2)}`;
+        currValStr = `$${safeMoney(match.current_value ?? costBasisNum)}`;
+        const pnl = typeof match.pnl === "number" ? match.pnl : 0;
+        const pnlPct = typeof match.pnl_pct === "number" ? match.pnl_pct : 0;
+        const sign = pnl >= 0 ? "+" : "";
+        pnlStr = match.is_unlisted ? "$0.00 (0.00%)" : `${sign}$${safeMoney(Math.abs(pnl))} (${sign}${safeFixed(pnlPct, 2)}%)`;
+        pnlColor = match.is_unlisted ? "text-slate-400" : (pnl > 0 ? "text-emerald-500" : (pnl < 0 ? "text-rose-500" : "text-slate-400"));
+        weightStr = match.weight_pct !== undefined ? `${match.weight_pct}%` : "...";
         if (match.is_unlisted) {
           tsSubtext = `<div class="text-[9px] text-indigo-400 font-mono font-medium tracking-tight">Pre-IPO / Unlisted</div>`;
         } else if (match.quote_timestamp_formatted || match.quote_timestamp) {
           const displayTs = match.quote_timestamp_formatted || match.quote_timestamp;
           tsSubtext = `<div class="text-[9px] text-slate-400 font-mono font-normal tracking-tight">${escapeHtml(displayTs)}</div>`;
         }
-        sparklineHtml = generateSparklineSVG(null, match.pnl >= 0, Boolean(match.is_unlisted));
+        sparklineHtml = generateSparklineSVG(null, pnl >= 0, Boolean(match.is_unlisted));
       }
     }
 
-    const costBasis = (h.shares * h.buy_price).toFixed(2);
+    const costBasis = safeFixed(costBasisNum, 2);
     const safeTicker = escapeHtml(h.ticker);
     const safeShares = escapeHtml(h.shares);
 
@@ -1490,7 +1529,7 @@ function renderHoldingsTable() {
         ${sparklineHtml}
       </td>
       <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 font-medium">${safeShares}</td>
-      <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 privacy-value">$${h.buy_price.toFixed(2)}</td>
+      <td class="py-3 px-4 text-right text-slate-600 dark:text-slate-300 privacy-value">$${safeFixed(h.buy_price, 2)}</td>
       <td class="py-3 px-4 text-right text-indigo-600 dark:text-indigo-400 font-semibold privacy-value">
         <div>${livePriceStr}</div>
         ${tsSubtext}
@@ -1529,7 +1568,7 @@ function renderHoldingsTable() {
     });
   });
 
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
   updateGoalMilestoneCalculator(portfolioForecastData);
   applyPrivacyMask();
 }
@@ -1638,7 +1677,7 @@ function startPortfolioLoadingAnimation() {
     if (span) span.textContent = "Calculating...";
   }
 
-  if (window.lucide) lucide.createIcons();
+  triggerLucideIcons();
 
   portfolioAnalysisSeconds = 0;
   if (timerBadge) timerBadge.textContent = "0s elapsed";
@@ -1784,25 +1823,27 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
 
   // Update KPI Cards with rolling count-up & flash animation
   const costBasisElem = document.getElementById("portfolio-cost-basis");
+  const costBasisVal = typeof data.total_cost_basis === "number" ? data.total_cost_basis : 0;
   if (costBasisElem) {
     const rawPrevCost = parseFloat(costBasisElem.textContent.replace(/[^0-9.-]/g, ""));
-    const prevCost = isNaN(rawPrevCost) ? data.total_cost_basis : rawPrevCost;
-    if (Math.abs(prevCost - data.total_cost_basis) > 0.01) {
-      animateValue(costBasisElem, prevCost, data.total_cost_basis, 800, (v) => `$${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    const prevCost = isNaN(rawPrevCost) ? costBasisVal : rawPrevCost;
+    if (Math.abs(prevCost - costBasisVal) > 0.01) {
+      animateValue(costBasisElem, prevCost, costBasisVal, 800, (v) => `$${safeMoney(v)}`);
     } else {
-      costBasisElem.textContent = `$${data.total_cost_basis.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      costBasisElem.textContent = `$${safeMoney(costBasisVal)}`;
     }
   }
 
   const currValElem = document.getElementById("portfolio-current-value");
+  const currVal = typeof data.current_portfolio_value === "number" ? data.current_portfolio_value : 0;
   if (currValElem) {
     const rawPrevVal = parseFloat(currValElem.textContent.replace(/[^0-9.-]/g, ""));
-    const prevVal = isNaN(rawPrevVal) ? data.current_portfolio_value : rawPrevVal;
-    if (Math.abs(prevVal - data.current_portfolio_value) > 0.01) {
-      animateValue(currValElem, prevVal, data.current_portfolio_value, 800, (v) => `$${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-      flashElement(currValElem, data.current_portfolio_value >= prevVal ? "up" : "down");
+    const prevVal = isNaN(rawPrevVal) ? currVal : rawPrevVal;
+    if (Math.abs(prevVal - currVal) > 0.01) {
+      animateValue(currValElem, prevVal, currVal, 800, (v) => `$${safeMoney(v)}`);
+      flashElement(currValElem, currVal >= prevVal ? "up" : "down");
     } else {
-      currValElem.textContent = `$${data.current_portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      currValElem.textContent = `$${safeMoney(currVal)}`;
     }
   }
 
@@ -1821,16 +1862,18 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
     portLiveText.textContent = `Last Updated: ${getFormattedETTime()}`;
   }
 
-  const isPos = data.total_unrealized_pnl >= 0;
+  const pnlNum = typeof data.total_unrealized_pnl === "number" ? data.total_unrealized_pnl : 0;
+  const pnlPctNum = typeof data.total_unrealized_pnl_pct === "number" ? data.total_unrealized_pnl_pct : 0;
+  const isPos = pnlNum >= 0;
   const pnlSign = isPos ? "+" : "";
-  const pnlPill = setTxt("portfolio-pnl-pill", `${pnlSign}${data.total_unrealized_pnl_pct.toFixed(2)}%`);
+  const pnlPill = setTxt("portfolio-pnl-pill", `${pnlSign}${safeFixed(pnlPctNum, 2)}%`);
   if (pnlPill) {
     pnlPill.className = isPos
       ? "px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
       : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
   }
 
-  const pnlDollar = setTxt("portfolio-pnl-dollar", `${pnlSign}$${Math.abs(data.total_unrealized_pnl).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Unrealized P&L`);
+  const pnlDollar = setTxt("portfolio-pnl-dollar", `${pnlSign}$${safeMoney(Math.abs(pnlNum))} Unrealized P&L`);
   if (pnlDollar) {
     pnlDollar.className = isPos ? "text-xs font-semibold text-emerald-500 privacy-value" : "text-xs font-semibold text-rose-500 privacy-value";
   }
@@ -1838,39 +1881,42 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
   // 60-Day KPI Summary
   const s60 = data.portfolio_60d_summary;
   if (s60) {
-    setTxt("portfolio-60d-mean", `$${s60.end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    setTxt("portfolio-60d-mean", `$${safeMoney(s60.end_value)}`);
 
-    const roiSign = s60.expected_roi_60d_pct >= 0 ? "+" : "";
-    const roiElem = setTxt("portfolio-60d-roi", `${roiSign}${s60.expected_roi_60d_pct.toFixed(2)}%`);
+    const roiPct = typeof s60.expected_roi_60d_pct === "number" ? s60.expected_roi_60d_pct : 0;
+    const roiSign = roiPct >= 0 ? "+" : "";
+    const roiElem = setTxt("portfolio-60d-roi", `${roiSign}${safeFixed(roiPct, 2)}%`);
     if (roiElem) {
-      roiElem.className = s60.expected_roi_60d_pct >= 0
+      roiElem.className = roiPct >= 0
         ? "px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-500"
         : "px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500";
     }
 
-    const isProfitPos = s60.expected_profit_60d >= 0;
+    const expProfit = typeof s60.expected_profit_60d === "number" ? s60.expected_profit_60d : 0;
+    const isProfitPos = expProfit >= 0;
     const profitSign = isProfitPos ? "+" : "-";
     const profitLabel = isProfitPos ? "Expected gain (60D)" : "Expected loss (60D)";
     const profitColor = isProfitPos ? "text-slate-500 dark:text-slate-400" : "text-rose-500 dark:text-rose-400";
-    const profitElem = setTxt("portfolio-60d-profit", `${profitSign}$${Math.abs(s60.expected_profit_60d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${profitLabel}`);
+    const profitElem = setTxt("portfolio-60d-profit", `${profitSign}$${safeMoney(Math.abs(expProfit))} ${profitLabel}`);
     if (profitElem) {
       profitElem.className = `text-xs font-medium ${profitColor} privacy-value`;
     }
 
-    setTxt("portfolio-60d-min", `$${Math.round(s60.predicted_min).toLocaleString()}`);
-    setTxt("portfolio-60d-max", `$${Math.round(s60.predicted_max).toLocaleString()}`);
+    setTxt("portfolio-60d-min", `$${safeInt(s60.predicted_min)}`);
+    setTxt("portfolio-60d-max", `$${safeInt(s60.predicted_max)}`);
   }
 
   // 3-Year Milestones
   const s3y = data.portfolio_3y_summary;
   if (s3y) {
-    setTxt("portfolio-y1-val", `$${s3y.year_1_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-    setTxt("portfolio-y2-val", `$${s3y.year_2_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-    setTxt("portfolio-y3-val", `$${s3y.year_3_end_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    setTxt("portfolio-y1-val", `$${safeMoney(s3y.year_1_end_value)}`);
+    setTxt("portfolio-y2-val", `$${safeMoney(s3y.year_2_end_value)}`);
+    setTxt("portfolio-y3-val", `$${safeMoney(s3y.year_3_end_value)}`);
     
-    const isCagrPos = s3y.cagr_3y_pct >= 0;
+    const cagrPct = typeof s3y.cagr_3y_pct === "number" ? s3y.cagr_3y_pct : 0;
+    const isCagrPos = cagrPct >= 0;
     const cagrSign = isCagrPos ? "+" : "";
-    const cagrElem = setTxt("portfolio-cagr", `${cagrSign}${s3y.cagr_3y_pct.toFixed(2)}%`);
+    const cagrElem = setTxt("portfolio-cagr", `${cagrSign}${safeFixed(cagrPct, 2)}%`);
     if (cagrElem) {
       cagrElem.className = isCagrPos
         ? "text-xs font-semibold text-emerald-500"
@@ -1880,9 +1926,13 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
 
   // Portfolio Critical Support Floor KPI & Pill
   if (data.support_levels) {
-    setTxt("portfolio-support-floor-stat", `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-    setTxt("portfolio-support-cushion-stat", `+${data.support_levels.cushion_pct.toFixed(1)}% downside buffer ($${data.support_levels.cushion_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`);
-    setTxt("header-portfolio-support-val", `$${data.support_levels.critical_support_floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    const floorVal = typeof data.support_levels.critical_support_floor === "number" ? data.support_levels.critical_support_floor : 0;
+    const cushionPct = typeof data.support_levels.cushion_pct === "number" ? data.support_levels.cushion_pct : 0;
+    const cushionDollars = typeof data.support_levels.cushion_dollars === "number" ? data.support_levels.cushion_dollars : 0;
+
+    setTxt("portfolio-support-floor-stat", `$${safeMoney(floorVal)}`);
+    setTxt("portfolio-support-cushion-stat", `+${safeFixed(cushionPct, 1)}% downside buffer ($${safeMoney(cushionDollars)})`);
+    setTxt("header-portfolio-support-val", `$${safeMoney(floorVal)}`);
     updatePortfolioSupportBtnState();
   }
 
@@ -1922,9 +1972,9 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
     if (portfolio60dChart.data.datasets[1]) portfolio60dChart.data.datasets[1].data = mins;
     if (portfolio60dChart.data.datasets[2]) portfolio60dChart.data.datasets[2].data = means;
     if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels && portfolio60dChart.data.datasets[3]) {
-      const floor = portfolioForecastData.support_levels.critical_support_floor;
+      const floor = typeof portfolioForecastData.support_levels.critical_support_floor === "number" ? portfolioForecastData.support_levels.critical_support_floor : 0;
       portfolio60dChart.data.datasets[3].data = labels.map(() => floor);
-      portfolio60dChart.data.datasets[3].label = `Portfolio Support Floor ($${floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+      portfolio60dChart.data.datasets[3].label = `Portfolio Support Floor ($${safeMoney(floor)})`;
     }
     portfolio60dChart.update('none');
     return;
@@ -1984,9 +2034,9 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
   ];
 
   if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels) {
-    const floor = portfolioForecastData.support_levels.critical_support_floor;
+    const floor = typeof portfolioForecastData.support_levels.critical_support_floor === "number" ? portfolioForecastData.support_levels.critical_support_floor : 0;
     chartDatasets.push({
-      label: `Portfolio Support Floor ($${floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
+      label: `Portfolio Support Floor ($${safeMoney(floor)})`,
       data: labels.map(() => floor),
       borderColor: dark ? "rgba(244, 63, 94, 0.9)" : "rgba(225, 29, 72, 0.9)",
       borderWidth: 2,
@@ -2002,7 +2052,7 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
     id: "portfolioSupportBadgePlugin",
     afterDraw: (chart) => {
       if (!showPortfolioSupportLine || !portfolioForecastData || !portfolioForecastData.support_levels) return;
-      const floor = portfolioForecastData.support_levels.critical_support_floor;
+      const floor = typeof portfolioForecastData.support_levels.critical_support_floor === "number" ? portfolioForecastData.support_levels.critical_support_floor : 0;
       const yScale = chart.scales.y;
       const xScale = chart.scales.x;
       if (!yScale || !xScale) return;
@@ -2012,7 +2062,7 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
 
       const c = chart.ctx;
       c.save();
-      const badgeText = `🛡️ PORTFOLIO FLOOR: $${floor.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      const badgeText = `🛡️ PORTFOLIO FLOOR: $${safeMoney(floor)}`;
       c.font = "bold 10px Inter, -apple-system, sans-serif";
       const metrics = c.measureText(badgeText);
       const textWidth = metrics.width;
@@ -2078,7 +2128,7 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
               return `Day +${idx + 1} • ${pt ? pt.date : ""}`;
             },
             label: function (context) {
-              return `${context.dataset.label}: $${context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+              return `${context.dataset.label}: $${safeMoney(context.parsed.y)}`;
             },
             afterBody: function (items) {
               if (!items || !items.length || !dailyPoints) return [];
@@ -2091,8 +2141,8 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
               const profitSign = profit >= 0 ? "+" : "-";
               const spread = pt.max - pt.min;
               return [
-                `Expected ROI: ${roiSign}${roi.toFixed(2)}% (${profitSign}$${Math.abs(profit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
-                `Range: $${Math.round(pt.min).toLocaleString()} — $${Math.round(pt.max).toLocaleString()} (Spread: $${Math.round(spread).toLocaleString()})`
+                `Expected ROI: ${roiSign}${safeFixed(roi, 2)}% (${profitSign}$${safeMoney(Math.abs(profit))})`,
+                `Range: $${safeInt(pt.min)} — $${safeInt(pt.max)} (Spread: $${safeInt(spread)})`
               ];
             }
           },
@@ -2110,7 +2160,7 @@ function renderPortfolio60dChart(dailyPoints, currentVal, isLiveUpdate = false) 
           grid: { color: gridColor },
           ticks: {
             color: tickColor,
-            callback: (v) => `$${v.toLocaleString()}`,
+            callback: (v) => `$${safeInt(v)}`,
           },
         },
       },
@@ -2129,17 +2179,17 @@ function populatePortfolioDailyTable(dailyPoints, currentVal) {
   dailyPoints.forEach((pt) => {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition";
-    const gain = pt.mean - currentVal;
+    const gain = (pt.mean || 0) - (currentVal || 0);
     const sign = gain >= 0 ? "+" : "";
     const color = gain >= 0 ? "text-emerald-500" : "text-rose-500";
 
     tr.innerHTML = `
       <td class="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">Day +${pt.day_index}</td>
-      <td class="py-2.5 px-4 text-slate-400">${pt.date}</td>
-      <td class="py-2.5 px-4 text-right text-rose-500 privacy-value">$${pt.min.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400 privacy-value">$${pt.mean.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="py-2.5 px-4 text-right text-emerald-500 privacy-value">$${pt.max.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="py-2.5 px-4 text-right font-semibold ${color} privacy-value">${sign}$${gain.toFixed(2)}</td>
+      <td class="py-2.5 px-4 text-slate-400">${escapeHtml(pt.date)}</td>
+      <td class="py-2.5 px-4 text-right text-rose-500 privacy-value">$${safeMoney(pt.min)}</td>
+      <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400 privacy-value">$${safeMoney(pt.mean)}</td>
+      <td class="py-2.5 px-4 text-right text-emerald-500 privacy-value">$${safeMoney(pt.max)}</td>
+      <td class="py-2.5 px-4 text-right font-semibold ${color} privacy-value">${sign}$${safeMoney(Math.abs(gain))}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2164,9 +2214,9 @@ function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
     if (portfolio3yChart.data.datasets[1]) portfolio3yChart.data.datasets[1].data = mins;
     if (portfolio3yChart.data.datasets[2]) portfolio3yChart.data.datasets[2].data = means;
     if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels && portfolio3yChart.data.datasets[3]) {
-      const floor3y = portfolioForecastData.support_levels.monthly_support_floor;
+      const floor3y = typeof portfolioForecastData.support_levels.monthly_support_floor === "number" ? portfolioForecastData.support_levels.monthly_support_floor : 0;
       portfolio3yChart.data.datasets[3].data = labels.map(() => floor3y);
-      portfolio3yChart.data.datasets[3].label = `Portfolio 3Y Floor ($${floor3y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+      portfolio3yChart.data.datasets[3].label = `Portfolio 3Y Floor ($${safeMoney(floor3y)})`;
     }
     portfolio3yChart.update('none');
     return;
@@ -2215,9 +2265,9 @@ function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
   ];
 
   if (showPortfolioSupportLine && portfolioForecastData && portfolioForecastData.support_levels) {
-    const floor3y = portfolioForecastData.support_levels.monthly_support_floor;
+    const floor3y = typeof portfolioForecastData.support_levels.monthly_support_floor === "number" ? portfolioForecastData.support_levels.monthly_support_floor : 0;
     datasets3y.push({
-      label: `3Y Structural Support Floor ($${floor3y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
+      label: `3Y Structural Support Floor ($${safeMoney(floor3y)})`,
       data: labels.map(() => floor3y),
       borderColor: dark ? "rgba(244, 63, 94, 0.9)" : "rgba(225, 29, 72, 0.9)",
       borderWidth: 2,
@@ -2266,7 +2316,7 @@ function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
               return `Month +${idx + 1} • ${pt ? pt.year_month : ""}`;
             },
             label: function (context) {
-              return `${context.dataset.label}: $${context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+              return `${context.dataset.label}: $${safeMoney(context.parsed.y)}`;
             },
             afterBody: function (items) {
               if (!items || !items.length || !monthlyPoints) return [];
@@ -2279,8 +2329,8 @@ function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
               const profit = pt.mean - curVal;
               const profitSign = profit >= 0 ? "+" : "-";
               return [
-                `Projected Growth: ${roiSign}${roi.toFixed(2)}% (${profitSign}$${Math.abs(profit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`,
-                `Spread: $${Math.round(pt.max - pt.min).toLocaleString()} (Min: $${Math.round(pt.min).toLocaleString()} — Max: $${Math.round(pt.max).toLocaleString()})`
+                `Projected Growth: ${roiSign}${safeFixed(roi, 2)}% (${profitSign}$${safeMoney(Math.abs(profit))})`,
+                `Spread: $${safeInt(pt.max - pt.min)} (Min: $${safeInt(pt.min)} — Max: $${safeInt(pt.max)})`
               ];
             }
           },
@@ -2298,7 +2348,7 @@ function renderPortfolio3yChart(monthlyPoints, isLiveUpdate = false) {
           grid: { color: gridColor },
           ticks: {
             color: tickColor,
-            callback: (v) => `$${v.toLocaleString()}`,
+            callback: (v) => `$${safeInt(v)}`,
           },
         },
       },
@@ -2320,9 +2370,9 @@ function populatePortfolioMonthlyTable(monthlyPoints) {
     tr.innerHTML = `
       <td class="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">${escapeHtml(p.year_month)}</td>
       <td class="py-2.5 px-4 text-slate-400">Month +${p.month_index}</td>
-      <td class="py-2.5 px-4 text-right text-rose-500 privacy-value">$${p.min.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400 privacy-value">$${p.mean.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="py-2.5 px-4 text-right text-emerald-500 privacy-value">$${p.max.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+      <td class="py-2.5 px-4 text-right text-rose-500 privacy-value">$${safeMoney(p.min)}</td>
+      <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400 privacy-value">$${safeMoney(p.mean)}</td>
+      <td class="py-2.5 px-4 text-right text-emerald-500 privacy-value">$${safeMoney(p.max)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2351,8 +2401,8 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
     "#64748b"  // Slate
   ];
 
-  const labels = sectors.map((s) => s.sector);
-  const dataVals = sectors.map((s) => s.value);
+  const labels = sectors.map((s) => s.sector || "Other");
+  const dataVals = sectors.map((s) => (typeof s.total_value === "number" ? s.total_value : (typeof s.value === "number" ? s.value : 0)));
   const bgColors = sectors.map((_, i) => colors[i % colors.length]);
 
   if (sectorDonutChartInstance) {
@@ -2392,8 +2442,8 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
           callbacks: {
             label: function (ctx) {
               const val = ctx.parsed || 0;
-              const pct = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : 0;
-              return ` $${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${pct}%)`;
+              const pct = totalValue > 0 ? safeFixed((val / totalValue) * 100, 1) : "0.0";
+              return ` $${safeMoney(val)} (${pct}%)`;
             }
           }
         }
@@ -2406,8 +2456,8 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
     const top = sectors[0];
     const centerSector = document.getElementById("donut-center-sector");
     const centerPct = document.getElementById("donut-center-pct");
-    if (centerSector) centerSector.textContent = top.sector;
-    if (centerPct) centerPct.textContent = `${top.weight_pct}%`;
+    if (centerSector) centerSector.textContent = top.sector || "Equities";
+    if (centerPct) centerPct.textContent = `${safeFixed(top.weight_pct, 1)}%`;
   }
 
   // Concentration Risk Badge & HHI Box
@@ -2417,9 +2467,9 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
     const hhiVal = document.getElementById("concentration-hhi-val");
     const warningText = document.getElementById("concentration-warning-text");
 
-    if (riskText) riskText.textContent = concentrationRisk.risk_level;
-    if (hhiVal) hhiVal.textContent = Math.round(concentrationRisk.hhi).toLocaleString();
-    if (warningText) warningText.textContent = concentrationRisk.warning_message;
+    if (riskText) riskText.textContent = concentrationRisk.risk_level || "Balanced";
+    if (hhiVal) hhiVal.textContent = safeInt(concentrationRisk.hhi);
+    if (warningText) warningText.textContent = concentrationRisk.warning_message || "";
 
     if (riskBadge) {
       if (concentrationRisk.risk_color === "rose") {
@@ -2438,6 +2488,9 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
     breakdownList.innerHTML = "";
     sectors.forEach((sec, idx) => {
       const color = colors[idx % colors.length];
+      const val = typeof sec.total_value === "number" ? sec.total_value : (typeof sec.value === "number" ? sec.value : 0);
+      const count = typeof sec.count === "number" ? sec.count : 1;
+      const weight = typeof sec.weight_pct === "number" ? sec.weight_pct : 0;
       const row = document.createElement("div");
       row.className = "p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.05] space-y-1.5";
       row.innerHTML = `
@@ -2445,15 +2498,15 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
           <div class="flex items-center space-x-2">
             <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></span>
             <span class="font-semibold text-slate-800 dark:text-slate-200">${escapeHtml(sec.sector)}</span>
-            <span class="text-[10px] text-slate-400">(${sec.count} ${sec.count === 1 ? 'position' : 'positions'})</span>
+            <span class="text-[10px] text-slate-400">(${count} ${count === 1 ? 'position' : 'positions'})</span>
           </div>
           <div class="flex items-center space-x-3 font-mono">
-            <span class="font-bold text-slate-900 dark:text-white privacy-value">$${sec.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-            <span class="text-indigo-500 font-bold">${sec.weight_pct}%</span>
+            <span class="font-bold text-slate-900 dark:text-white privacy-value">$${safeMoney(val)}</span>
+            <span class="text-indigo-500 font-bold">${safeFixed(weight, 1)}%</span>
           </div>
         </div>
         <div class="w-full h-1.5 rounded-full bg-black/5 dark:bg-white/5 overflow-hidden">
-          <div class="h-full rounded-full transition-all duration-500" style="width: ${sec.weight_pct}%; background-color: ${color}"></div>
+          <div class="h-full rounded-full transition-all duration-500" style="width: ${Math.min(100, Math.max(0, weight))}%; background-color: ${color}"></div>
         </div>
       `;
       breakdownList.appendChild(row);
@@ -2670,9 +2723,9 @@ function updateGoalMilestoneCalculator(data = null) {
   const targetValElem = document.getElementById("milestone-target-val");
 
   if (cagrBadge) {
-    if (cagr !== null) {
+    if (cagr !== null && typeof cagr === "number") {
       const sign = cagr >= 0 ? "+" : "";
-      cagrBadge.textContent = `Projected CAGR: ${sign}${cagr.toFixed(2)}%`;
+      cagrBadge.textContent = `Projected CAGR: ${sign}${safeFixed(cagr, 2)}%`;
       cagrBadge.className = cagr >= 0
         ? "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
         : "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
@@ -2683,13 +2736,17 @@ function updateGoalMilestoneCalculator(data = null) {
   }
 
   if (currValElem) {
-    currValElem.textContent = `$${currentVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    currValElem.textContent = `$${safeMoney(currentVal)}`;
   }
 
   window.recalculateMilestone = function(target) {
-    milestoneTarget = target;
+    const validTarget = (typeof target === "number" && !isNaN(target) && target > 0)
+      ? target
+      : (parseFloat(target) || milestoneTarget || 50000);
+    milestoneTarget = validTarget;
+
     if (targetValElem) {
-      targetValElem.textContent = `$${target.toLocaleString()}`;
+      targetValElem.textContent = `$${safeInt(validTarget)}`;
     }
 
     if (currentVal <= 0 || !Array.isArray(portfolioHoldings) || portfolioHoldings.length === 0) {
@@ -2704,24 +2761,24 @@ function updateGoalMilestoneCalculator(data = null) {
       return;
     }
 
-    const pct = Math.min(100, Math.max(0, (currentVal / target) * 100));
-    if (progressPctElem) progressPctElem.textContent = `${pct.toFixed(1)}%`;
+    const pct = Math.min(100, Math.max(0, (currentVal / validTarget) * 100));
+    if (progressPctElem) progressPctElem.textContent = `${safeFixed(pct, 1)}%`;
     if (progressBar) progressBar.style.width = `${pct}%`;
 
-    if (currentVal >= target) {
+    if (currentVal >= validTarget) {
       if (statusBadge) {
         statusBadge.textContent = "Goal Achieved 🎉";
         statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30";
       }
       if (dateElem) dateElem.textContent = "Target Reached!";
-      if (timeElem) timeElem.textContent = `Current portfolio equity ($${currentVal.toLocaleString(undefined, {maximumFractionDigits: 0})}) exceeds your milestone target`;
+      if (timeElem) timeElem.textContent = `Current portfolio equity ($${safeMoney(currentVal, 0)}) exceeds your milestone target`;
       return;
     }
 
     // 1. Check exact 36-month ML monthly trajectory first
     let hitMonthObj = null;
     if (monthlyTrajectory && monthlyTrajectory.length > 0) {
-      hitMonthObj = monthlyTrajectory.find(m => (m.mean || 0) >= target);
+      hitMonthObj = monthlyTrajectory.find(m => (m.mean || 0) >= validTarget);
     }
 
     if (hitMonthObj) {
@@ -2734,7 +2791,7 @@ function updateGoalMilestoneCalculator(data = null) {
       if (timeElem) {
         timeElem.textContent = mIdx <= 12
           ? `Estimated in ~${mIdx} month${mIdx > 1 ? "s" : ""} based on 36-month ML forecast`
-          : `Estimated in ~${(mIdx / 12).toFixed(1)} years (${mIdx} months) based on 36-month ML forecast`;
+          : `Estimated in ~${safeFixed(mIdx / 12, 1)} years (${mIdx} months) based on 36-month ML forecast`;
       }
       return;
     }
@@ -2742,7 +2799,7 @@ function updateGoalMilestoneCalculator(data = null) {
     // 2. Beyond 36 months, calculate using compound annual growth rate (CAGR)
     if (cagr !== null && cagr > 0) {
       const r = cagr / 100;
-      const years = Math.log(target / currentVal) / Math.log(1 + r);
+      const years = Math.log(validTarget / currentVal) / Math.log(1 + r);
       const totalMonths = Math.max(1, Math.round(years * 12));
 
       const hitDate = new Date();
@@ -2756,7 +2813,7 @@ function updateGoalMilestoneCalculator(data = null) {
 
       if (dateElem) dateElem.textContent = dateStr;
       if (timeElem) {
-        timeElem.textContent = `Estimated in ~${years.toFixed(1)} years (${totalMonths} months) at ${cagr.toFixed(1)}% CAGR`;
+        timeElem.textContent = `Estimated in ~${safeFixed(years, 1)} years (${totalMonths} months) at ${safeFixed(cagr, 1)}% CAGR`;
       }
       return;
     }
@@ -2768,16 +2825,16 @@ function updateGoalMilestoneCalculator(data = null) {
         statusBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30";
       }
       if (dateElem) dateElem.textContent = "Requires Growth Drift";
-      const shortfall = target - currentVal;
+      const shortfall = Math.max(0, validTarget - currentVal);
       if (timeElem) {
-        timeElem.textContent = `Target requires +$${shortfall.toLocaleString(undefined, {maximumFractionDigits: 0})} capital appreciation or contributions`;
+        timeElem.textContent = `Target requires +$${safeInt(shortfall)} capital appreciation or contributions`;
       }
       return;
     }
 
     // 4. Forecast still loading or not yet available: project with standard 10% market benchmark
     const r = 0.10;
-    const years = Math.log(target / currentVal) / Math.log(1 + r);
+    const years = Math.log(validTarget / currentVal) / Math.log(1 + r);
     const totalMonths = Math.max(1, Math.round(years * 12));
     const hitDate = new Date();
     hitDate.setMonth(hitDate.getMonth() + totalMonths);
@@ -2789,7 +2846,7 @@ function updateGoalMilestoneCalculator(data = null) {
     }
     if (dateElem) dateElem.textContent = `~${dateStr}`;
     if (timeElem) {
-      timeElem.textContent = `Estimated in ~${years.toFixed(1)} years (${totalMonths} mos) at 10% benchmark (*updating live...)`;
+      timeElem.textContent = `Estimated in ~${safeFixed(years, 1)} years (${totalMonths} mos) at 10% benchmark (*updating live...)`;
     }
   };
 
@@ -2925,7 +2982,7 @@ function initCommandPalette() {
       results.appendChild(row);
     });
 
-    if (window.lucide) lucide.createIcons();
+    triggerLucideIcons();
   }
 
   function updateSelectionHighlight() {
