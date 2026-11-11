@@ -6,3 +6,4 @@ from backend.app.main import app
 
 application = ASGIMiddleware(app)
 app_wsgi = application
+
