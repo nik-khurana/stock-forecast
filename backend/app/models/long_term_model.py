@@ -76,10 +76,11 @@ class LongTermMonthlyModel:
             else:
                 slope_12 = slope
 
-            # Blend 36-month structural baseline (40%) with 12-month recent regime momentum (60%)
-            # This ensures stocks in a prolonged downtrend or selloff do not project artificial upward slopes.
-            blended_slope = 0.40 * slope + 0.60 * slope_12
-            trend_slope = float(np.clip(blended_slope, -0.025, 0.025))
+            # Blend 36-month structural baseline (70%) with 12-month recent regime momentum (30%)
+            # Anchors primarily to the full multi-year business cycle while still acknowledging recent momentum
+            blended_slope = 0.70 * slope + 0.30 * slope_12
+            # Bound monthly trend slope realistically: max -1.2% monthly (-13.5%/yr) to +2.5% monthly (+35%/yr)
+            trend_slope = float(np.clip(blended_slope, -0.012, 0.025))
 
         # -------------------------------------------------------------
         # 2. Project 36 Forward Monthly Intervals (3 Years)

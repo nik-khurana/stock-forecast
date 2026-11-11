@@ -252,7 +252,7 @@ class ForecastService:
             badge_color = "indigo"
             reasoning = (
                 f"Recommended for {ticker}. In balanced market conditions with {divergence_pct}% model divergence, "
-                f"consensus blending (60% GBDT + 40% Ridge) dampens individual model swings and provides the highest stability."
+                f"consensus blending (50% GBDT + 50% Ridge) dampens individual model swings and provides the highest stability."
             )
 
         return {

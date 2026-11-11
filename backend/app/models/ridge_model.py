@@ -66,10 +66,10 @@ class RidgeModel:
         X = train_data[feature_cols].values
         y = train_data["target_return"].values
 
-        # Exponential Recency Weighting (half-life = 90 trading days)
-        half_life = 90
+        # Balanced Recency Weighting (half-life = 252 trading days = 1 market year)
         n_samples = len(train_data)
-        sample_weights = np.exp(-np.log(2) * (n_samples - 1 - np.arange(n_samples)) / half_life)
+        recency = np.exp(-np.log(2) * (n_samples - 1 - np.arange(n_samples)) / 252)
+        sample_weights = 0.35 + 0.65 * recency
         sample_weights = sample_weights / np.mean(sample_weights)
 
         # Scale features so L2 penalty is applied uniformly across features with different units
@@ -81,15 +81,23 @@ class RidgeModel:
         # -------------------------------------------------------------
         preds = self.model.predict(X_scaled)
         residuals = y - preds
-        # Ensure minimum residual std floor
-        residual_std = max(float(np.std(residuals)), 0.025)
+        residual_std = max(float(np.std(residuals)), 0.020)
 
         # -------------------------------------------------------------
-        # 3. Predict Forward Multi-Horizon Return & Continuous Trajectory
+        # 3. Predict Forward Multi-Horizon Return & Continuous Trajectory from LIVE State
         # -------------------------------------------------------------
-        last_features = X_scaled[-1:]
-        r_pred = float(self.model.predict(last_features)[0])
-        r_pred = float(np.clip(r_pred, -0.40, 0.40))
+        # Use true latest market bar from df_features (today's close & live indicators)
+        live_features = df_features[feature_cols].iloc[[-1]].values
+        live_scaled = self.scaler.transform(live_features)
+        r_pred = float(self.model.predict(live_scaled)[0])
+
+        # Bound expected return based on stock volatility over horizon H
+        daily_log_returns = np.log(train_data["close"] / train_data["close"].shift(1)).dropna().values
+        hist_daily_vol = max(float(np.std(daily_log_returns)), 0.010)
+        h_vol = hist_daily_vol * np.sqrt(H)
+        max_bound = max(0.18, min(0.30, 2.2 * h_vol))
+        min_bound = -max(0.15, min(0.28, 2.0 * h_vol))
+        r_pred = float(np.clip(r_pred, min_bound, max_bound))
 
         # Standard normal critical value for 90% two-tailed confidence interval is 1.645
         z_score = 1.645
@@ -97,11 +105,17 @@ class RidgeModel:
         daily_points = []
 
         for step_i, dt in enumerate(pred_dates):
-            t_frac = (step_i + 1) / H
-            drift_t = r_pred * (t_frac ** 0.85)
+            t = step_i + 1
+            if t <= H:
+                drift_t = r_pred * ((t / H) ** 0.85)
+                spread_factor = np.sqrt(t / H)
+            else:
+                excess_ratio = (t - H) / H
+                saturation = 1.0 + np.log1p(excess_ratio) * 0.50
+                drift_t = r_pred * saturation
+                spread_factor = np.sqrt(t / H)
 
-            # Uncertainty expands as sqrt of the forecast step (diffusion process)
-            horizon_spread = residual_std * z_score * np.sqrt((step_i + 1) / H)
+            horizon_spread = residual_std * z_score * spread_factor
 
             p_step_mean = current_price * np.exp(drift_t)
             p_step_min = current_price * np.exp(drift_t - horizon_spread)

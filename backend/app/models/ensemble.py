@@ -26,7 +26,7 @@ class EnsembleModel:
     def blend(
         gbdt_res: Dict[str, Any],
         ridge_res: Dict[str, Any],
-        gbdt_weight: float = 0.60
+        gbdt_weight: float = 0.50
     ) -> Dict[str, Any]:
         """
         Takes the output dictionary from GBDT and Ridge and produces an ensemble forecast.

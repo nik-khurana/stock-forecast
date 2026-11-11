@@ -108,11 +108,11 @@ class GBDTModel:
         X = train_data[feature_cols].values
         y = train_data["target_return"].values
 
-        # Exponential Recency Weighting (half-life = 90 trading days)
-        # Prevents 3-year-old bull market regimes from overpowering current selloffs or downtrends.
-        half_life = 90
+        # Balanced Recency Weighting (half-life = 252 trading days = 1 market year)
+        # Gives recent market regimes priority while preserving cycle memory & avoiding overfitting
         n_samples = len(train_data)
-        sample_weights = np.exp(-np.log(2) * (n_samples - 1 - np.arange(n_samples)) / half_life)
+        recency = np.exp(-np.log(2) * (n_samples - 1 - np.arange(n_samples)) / 252)
+        sample_weights = 0.35 + 0.65 * recency
         sample_weights = sample_weights / np.mean(sample_weights)
 
         # Normalize features
@@ -126,27 +126,33 @@ class GBDTModel:
         self.model_upper.fit(X_scaled, y, sample_weight=sample_weights)
 
         # -------------------------------------------------------------
-        # 3. Predict Forward Multi-Horizon Quantile Returns from Latest State
+        # 3. Predict Forward Multi-Horizon Quantile Returns from LIVE Market State
         # -------------------------------------------------------------
-        last_features = X_scaled[-1:]
-        r_median = float(self.model_median.predict(last_features)[0])
-        r_lower = float(self.model_lower.predict(last_features)[0])
-        r_upper = float(self.model_upper.predict(last_features)[0])
+        # Use the true latest available market bar (today's close & live indicators)
+        live_features = df_features[feature_cols].iloc[[-1]].values
+        live_scaled = self.scaler.transform(live_features)
 
-        # Enforce strict quantile monotonicity: lower <= median <= upper
-        if r_lower > r_median:
-            r_lower = r_median - 0.05
-        if r_upper < r_median:
-            r_upper = r_median + 0.05
-
-        # Quantitative volatility guardrails
-        r_median = float(np.clip(r_median, -0.45, 0.45))
-        r_lower = float(np.clip(r_lower, -0.65, r_median - 0.02))
-        r_upper = float(np.clip(r_upper, r_median + 0.02, 0.65))
+        r_median = float(self.model_median.predict(live_scaled)[0])
+        r_lower = float(self.model_lower.predict(live_scaled)[0])
+        r_upper = float(self.model_upper.predict(live_scaled)[0])
 
         # Realized daily volatility of historical returns (used for uncertainty cone)
         daily_log_returns = np.log(train_data["close"] / train_data["close"].shift(1)).dropna().values
-        hist_daily_vol = max(float(np.std(daily_log_returns)), 0.012)
+        hist_daily_vol = max(float(np.std(daily_log_returns)), 0.010)
+        h_vol = hist_daily_vol * np.sqrt(H)
+
+        # Enforce strict quantile monotonicity: lower <= median <= upper
+        if r_lower > r_median:
+            r_lower = r_median - (0.5 * h_vol)
+        if r_upper < r_median:
+            r_upper = r_median + (0.5 * h_vol)
+
+        # Quantitative volatility guardrails scaled by the stock's actual volatility
+        max_bound = max(0.20, min(0.35, 2.5 * h_vol))
+        min_bound = -max(0.18, min(0.30, 2.2 * h_vol))
+        r_median = float(np.clip(r_median, min_bound, max_bound))
+        r_lower = float(np.clip(r_lower, r_median - 2.0 * h_vol, r_median - 0.02))
+        r_upper = float(np.clip(r_upper, r_median + 0.02, r_median + 2.0 * h_vol))
 
         # -------------------------------------------------------------
         # 4. Generate Continuous Term-Structure Forward Daily Trajectory
@@ -155,17 +161,24 @@ class GBDTModel:
         daily_points = []
 
         for step_i, dt in enumerate(pred_dates):
-            t_frac = (step_i + 1) / H
-            # Smooth momentum path scaling
-            drift_t = r_median * (t_frac ** 0.85)
+            t = step_i + 1
+            if t <= H:
+                # Smooth momentum scaling up to primary horizon H
+                drift_t = r_median * ((t / H) ** 0.85)
+                spread_factor = np.sqrt(t / H)
+            else:
+                # Beyond primary horizon H (e.g. 60-day portfolio forecast), momentum gently
+                # saturates toward equilibrium instead of compounding unbounded drops/spikes
+                excess_ratio = (t - H) / H
+                saturation = 1.0 + np.log1p(excess_ratio) * 0.50
+                drift_t = r_median * saturation
+                spread_factor = np.sqrt(t / H)
 
-            # Volatility expansion scales as sqrt of time
-            spread_factor = np.sqrt((step_i + 1) / H)
             lower_spread = (r_lower - r_median) * spread_factor
             upper_spread = (r_upper - r_median) * spread_factor
 
-            # Additional stochastic diffusion floor for robust envelope
-            diffusion_band = hist_daily_vol * np.sqrt(step_i + 1) * 0.40
+            # Stochastic diffusion floor for realistic uncertainty cone
+            diffusion_band = hist_daily_vol * np.sqrt(t) * 0.35
 
             p_step_mean = current_price * np.exp(drift_t)
             p_step_min = current_price * np.exp(drift_t + lower_spread - diffusion_band)

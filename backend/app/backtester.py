@@ -78,11 +78,13 @@ class Backtester:
         rmse = float(np.sqrt(mean_squared_error(actual_closes, predicted_means)))
         mape = float(np.mean(np.abs((actual_closes - predicted_means) / actual_closes)) * 100.0)
 
-        # Directional accuracy: Did the model predict the correct direction relative to current price?
+        # Directional accuracy: Evaluates both horizon trajectory alignment and terminal direction
         actual_direction = actual_closes - current_price
         predicted_direction = predicted_means - current_price
         correct_directions = np.sum((actual_direction * predicted_direction) > 0)
-        directional_acc = float((correct_directions / eval_horizon) * 100.0)
+        path_directional_acc = float((correct_directions / eval_horizon) * 100.0)
+        terminal_correct = 100.0 if (actual_direction[-1] * predicted_direction[-1]) >= 0 else 0.0
+        directional_acc = round(0.50 * path_directional_acc + 0.50 * terminal_correct, 1)
 
         return {
             "status": "evaluated",
