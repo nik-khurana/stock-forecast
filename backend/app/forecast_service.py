@@ -13,6 +13,7 @@ This service serves as the core coordinator between:
    tailored for the frontend charts and tables.
 """
 
+import os
 import time
 import logging
 import numpy as np
@@ -472,8 +473,9 @@ class ForecastService:
                 logger.error("Error generating forecast for holding %s: %s", tk, e, exc_info=True)
                 return {"warning": f"Symbol '{tk}': Model training failed ({str(e)})"}
 
-        # Train models in parallel (up to 4 concurrent worker threads)
-        worker_count = max(1, min(len(normalized_holdings), 4))
+        # Train models in parallel (max workers configurable via env, defaults to 2 to stay well within RAM limits)
+        max_allowed = int(os.getenv("MAX_ML_WORKERS", "2"))
+        worker_count = max(1, min(len(normalized_holdings), max_allowed))
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             for outcome in executor.map(_train_holding_models, normalized_holdings):
                 if not outcome:

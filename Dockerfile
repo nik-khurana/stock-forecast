@@ -20,18 +20,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend and frontend source code
+# Copy application code
 COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
+COPY your_application/ /app/your_application/
+COPY wsgi.py /app/wsgi.py
+COPY Procfile /app/Procfile
 COPY README.md /app/README.md
 
-# Hugging Face Spaces runs as user 1000 by default
+# Ensure non-root appuser permissions (required for Hugging Face Spaces & security best practices)
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Expose default port (7860 for Hugging Face, overridden by Render's $PORT)
-EXPOSE 7860
+# Expose ports (7860 for Hugging Face, 8000 default, overridden by Railway/Render $PORT)
+EXPOSE 7860 8000 8080
 
-# Start Uvicorn server
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT}"]
+# Start Uvicorn server dynamically binding to platform $PORT (defaults to 7860 for HF, $PORT for Railway)
+CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
