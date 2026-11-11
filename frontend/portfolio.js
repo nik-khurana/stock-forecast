@@ -32,7 +32,6 @@ let currentAdjustAction = "buy"; // "buy" or "sell"
 // Synchronized 10-Minute Market Streaming State (:00, :10, :20, :30, :40, :50)
 let portfolioLiveTimer = null;
 let isPortfolioLiveUpdating = false;
-let portfolioRiskReturnChart = null;
 let milestoneTarget = 50000;
 
 /**
@@ -991,15 +990,6 @@ function initPortfolioEventListeners() {
       window.print();
     });
   }
-
-  // Macro Stress-Testing Interactive Shock Slider
-  const shockSlider = document.getElementById("macro-shock-slider");
-  if (shockSlider) {
-    shockSlider.addEventListener("input", (e) => {
-      const shockPct = parseFloat(e.target.value);
-      updateSliderShockReadout(shockPct);
-    });
-  }
 }
 
 /**
@@ -1597,10 +1587,6 @@ function clearPortfolioForecastUI() {
     sectorDonutChartInstance.destroy();
     sectorDonutChartInstance = null;
   }
-  if (portfolioRiskReturnChart) {
-    portfolioRiskReturnChart.destroy();
-    portfolioRiskReturnChart = null;
-  }
 
   const dailyTbody = document.getElementById("portfolio-daily-tbody");
   if (dailyTbody) dailyTbody.innerHTML = "";
@@ -1610,8 +1596,6 @@ function clearPortfolioForecastUI() {
   if (sectorList) sectorList.innerHTML = "";
   const rebalTbody = document.getElementById("rebalancing-tbody");
   if (rebalTbody) rebalTbody.innerHTML = "";
-  const stressGrid = document.getElementById("stress-scenarios-grid");
-  if (stressGrid) stressGrid.innerHTML = "";
   syncPortfolioLiveStreaming();
 }
 
@@ -1906,16 +1890,6 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
   // Sector Allocation Donut & Concentration Guardrail
   if (data.sector_allocation && data.concentration_risk) {
     renderSectorAllocation(data.sector_allocation, data.concentration_risk, data.current_portfolio_value);
-  }
-
-  // Macro Stress-Testing & Market Crash Simulator
-  if (data.stress_test) {
-    renderMacroStressTest(data.stress_test, data.current_portfolio_value);
-  }
-
-  // Asset Risk vs. Return Bubble Matrix (2D Scatter Plot)
-  if (data.holdings_breakdown) {
-    renderRiskReturnMatrix(data.holdings_breakdown);
   }
 
   // Financial Goal Milestone & Time-to-Target Calculator
@@ -2483,120 +2457,6 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
 }
 
 /**
- * Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
- */
-/**
- * Macro Stress-Testing & Market Crash Simulator
- */
-let currentStressTestData = null;
-let currentStressPortfolioValue = 0;
-
-function renderMacroStressTest(stressData, currentVal) {
-  currentStressTestData = stressData;
-  currentStressPortfolioValue = currentVal;
-
-  const betaBadge = document.getElementById("portfolio-beta-badge");
-  if (betaBadge && stressData.portfolio_beta !== undefined) {
-    betaBadge.textContent = `Portfolio Beta: ${stressData.portfolio_beta.toFixed(2)}x (SPY)`;
-  }
-
-  const grid = document.getElementById("stress-scenarios-grid");
-  if (grid && Array.isArray(stressData.scenarios)) {
-    grid.innerHTML = "";
-    stressData.scenarios.forEach((sc) => {
-      const card = document.createElement("div");
-      let colorClass = "border-amber-500/30 hover:border-amber-500/50";
-      let badgeClass = "bg-amber-500/15 text-amber-500 border-amber-500/30";
-      if (sc.color === "rose") {
-        colorClass = "border-rose-500/30 hover:border-rose-500/50";
-        badgeClass = "bg-rose-500/15 text-rose-500 border-rose-500/30";
-      } else if (sc.color === "emerald") {
-        colorClass = "border-emerald-500/30 hover:border-emerald-500/50";
-        badgeClass = "bg-emerald-500/15 text-emerald-500 border-emerald-500/30";
-      } else if (sc.color === "cyan") {
-        colorClass = "border-cyan-500/30 hover:border-cyan-500/50";
-        badgeClass = "bg-cyan-500/15 text-cyan-500 border-cyan-500/30";
-      }
-
-      const dollarSign = sc.dollar_change >= 0 ? "+" : "-";
-      const impactSign = sc.portfolio_impact_pct >= 0 ? "+" : "";
-
-      card.className = `p-4 rounded-2xl apple-glass border ${colorClass} space-y-2 cursor-pointer transition hover:scale-[1.02] shadow-sm`;
-      card.setAttribute("title", `Click to simulate ${sc.market_shock_pct}% shock`);
-      card.innerHTML = `
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(sc.name)}</span>
-          <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border ${badgeClass}">
-            ${sc.market_shock_pct > 0 ? '+' : ''}${sc.market_shock_pct}%
-          </span>
-        </div>
-        <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">${escapeHtml(sc.description)}</p>
-        <div class="pt-1 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs font-mono">
-          <span class="text-slate-400">Projected:</span>
-          <span class="font-bold ${sc.dollar_change >= 0 ? 'text-emerald-500' : 'text-rose-500'} privacy-value">
-            ${dollarSign}$${Math.abs(sc.dollar_change).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${impactSign}${sc.portfolio_impact_pct.toFixed(1)}%)
-          </span>
-        </div>
-      `;
-
-      card.addEventListener("click", () => {
-        const slider = document.getElementById("macro-shock-slider");
-        if (slider) {
-          slider.value = sc.market_shock_pct;
-          updateSliderShockReadout(sc.market_shock_pct);
-        }
-      });
-
-      grid.appendChild(card);
-    });
-  }
-
-  // Update slider with current value
-  const slider = document.getElementById("macro-shock-slider");
-  if (slider) {
-    updateSliderShockReadout(parseFloat(slider.value) || 0);
-  }
-}
-
-function updateSliderShockReadout(shockPct) {
-  const beta = currentStressTestData && currentStressTestData.portfolio_beta ? currentStressTestData.portfolio_beta : 1.0;
-  const currVal = currentStressPortfolioValue > 0 ? currentStressPortfolioValue : (portfolioForecastData ? portfolioForecastData.current_portfolio_value : 0);
-
-  const impliedImpactPct = shockPct * beta;
-  const dollarChange = currVal * (impliedImpactPct / 100);
-  const stressedVal = currVal + dollarChange;
-
-  const shockLabel = document.getElementById("slider-shock-pct-label");
-  const impactPctElem = document.getElementById("slider-portfolio-impact-pct");
-  const dollarImpactElem = document.getElementById("slider-dollar-impact");
-  const stressedValElem = document.getElementById("slider-stressed-val");
-
-  const sign = shockPct > 0 ? "+" : "";
-  if (shockLabel) {
-    shockLabel.textContent = `${sign}${shockPct.toFixed(1)}%`;
-    if (shockPct > 0) shockLabel.className = "text-sm font-extrabold text-emerald-500 font-mono";
-    else if (shockPct < 0) shockLabel.className = "text-sm font-extrabold text-rose-500 font-mono";
-    else shockLabel.className = "text-sm font-extrabold text-indigo-500 font-mono";
-  }
-
-  const impSign = impliedImpactPct > 0 ? "+" : "";
-  if (impactPctElem) {
-    impactPctElem.textContent = `${impSign}${impliedImpactPct.toFixed(1)}%`;
-    impactPctElem.className = impliedImpactPct >= 0 ? "text-base font-bold text-emerald-500" : "text-base font-bold text-rose-500";
-  }
-
-  const dSign = dollarChange >= 0 ? "+" : "-";
-  if (dollarImpactElem) {
-    dollarImpactElem.textContent = `${dSign}$${Math.abs(dollarChange).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    dollarImpactElem.className = dollarChange >= 0 ? "text-base font-bold text-emerald-500 privacy-value" : "text-base font-bold text-rose-500 privacy-value";
-  }
-
-  if (stressedValElem) {
-    stressedValElem.textContent = `$${Math.max(0, stressedVal).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  }
-}
-
-/**
  * Checks backend health and updates the live US market session status pill.
  * Fully supports regular market hours, extended pre-market, and extended after-hours.
  */
@@ -2754,170 +2614,6 @@ function updatePriceColumnHeader(isOpen, session = "regular") {
     th.innerHTML = `<span>Live Price</span> <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Regular Session Live Price (9:30 AM – 4:00 PM ET)"></span>`;
     th.title = "Live streaming market price during NYSE / NASDAQ regular trading";
   }
-}
-
-/**
- * Renders the Asset Risk vs. Expected Return Bubble Matrix (2D Scatter Plot)
- */
-function renderRiskReturnMatrix(holdingsBreakdown) {
-  const canvas = document.getElementById("portfolioRiskReturnChart");
-  if (!canvas || !Array.isArray(holdingsBreakdown) || holdingsBreakdown.length === 0) return;
-
-  const dark = isDarkMode();
-  const ctx = canvas.getContext("2d");
-
-  const bubbleData = holdingsBreakdown.map((h) => {
-    let riskPct = 12.0;
-    if (h.is_unlisted) {
-      riskPct = 2.0;
-    } else if (h.support_floor && h.current_price > 0) {
-      const cushion = (Math.abs(h.current_price - h.support_floor) / h.current_price) * 100;
-      riskPct = Math.max(3, Math.min(35, cushion * 1.5));
-    }
-    const returnPct = h.forecast_60d_return_pct || 0.0;
-    const weight = h.weight_pct || 10;
-    const radius = Math.max(8, Math.min(26, Math.sqrt(weight) * 5.2));
-
-    let bg = "rgba(99, 102, 241, 0.7)";
-    let border = "#6366f1";
-    let quadrant = "Growth Anchor";
-
-    if (returnPct >= 0 && riskPct <= 16) {
-      bg = dark ? "rgba(16, 185, 129, 0.65)" : "rgba(16, 185, 129, 0.75)";
-      border = "#10b981";
-      quadrant = "Growth Anchor";
-    } else if (returnPct < 0 && riskPct <= 16) {
-      bg = dark ? "rgba(6, 182, 212, 0.65)" : "rgba(6, 182, 212, 0.75)";
-      border = "#06b6d4";
-      quadrant = "Defensive Rock";
-    } else if (returnPct >= 0 && riskPct > 16) {
-      bg = dark ? "rgba(245, 158, 11, 0.65)" : "rgba(245, 158, 11, 0.75)";
-      border = "#f59e0b";
-      quadrant = "High-Beta Growth";
-    } else {
-      bg = dark ? "rgba(244, 63, 94, 0.65)" : "rgba(244, 63, 94, 0.75)";
-      border = "#f43f5e";
-      quadrant = "Laggard / Risk";
-    }
-
-    return {
-      x: Number(riskPct.toFixed(1)),
-      y: Number(returnPct.toFixed(1)),
-      r: Number(radius.toFixed(1)),
-      ticker: h.ticker,
-      name: h.company_name,
-      weight: h.weight_pct,
-      val: h.current_value,
-      quadrant: quadrant,
-      bgColor: bg,
-      borderColor: border
-    };
-  });
-
-  if (portfolioRiskReturnChart) {
-    portfolioRiskReturnChart.destroy();
-  }
-
-  const gridColor = dark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.06)";
-  const tickColor = dark ? "#64748b" : "#94a3b8";
-
-  const quadrantLinesPlugin = {
-    id: "quadrantLines",
-    beforeDraw: (chart) => {
-      const { ctx: c, chartArea: { top, bottom, left, right }, scales: { x, y } } = chart;
-      const zeroY = y.getPixelForValue(0);
-      const medianX = x.getPixelForValue(16);
-
-      c.save();
-      c.setLineDash([4, 4]);
-      c.lineWidth = 1;
-      c.strokeStyle = dark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)";
-
-      if (zeroY >= top && zeroY <= bottom) {
-        c.beginPath();
-        c.moveTo(left, zeroY);
-        c.lineTo(right, zeroY);
-        c.stroke();
-      }
-
-      if (medianX >= left && medianX <= right) {
-        c.beginPath();
-        c.moveTo(medianX, top);
-        c.lineTo(medianX, bottom);
-        c.stroke();
-      }
-      c.restore();
-    }
-  };
-
-  portfolioRiskReturnChart = new Chart(ctx, {
-    type: "bubble",
-    plugins: [quadrantLinesPlugin],
-    data: {
-      datasets: [{
-        label: "Holdings",
-        data: bubbleData,
-        backgroundColor: bubbleData.map((b) => b.bgColor),
-        borderColor: bubbleData.map((b) => b.borderColor),
-        borderWidth: 2,
-        hoverBorderWidth: 3
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: dark ? "rgba(0, 0, 0, 0.95)" : "#ffffff",
-          titleColor: dark ? "#ffffff" : "#0f172a",
-          bodyColor: dark ? "#cbd5e1" : "#334155",
-          borderColor: dark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.08)",
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            title: function (items) {
-              if (!items || !items.length) return "";
-              const pt = items[0].raw;
-              return `${pt.ticker} • ${pt.name}`;
-            },
-            label: function (context) {
-              const pt = context.raw;
-              const sign = pt.y >= 0 ? "+" : "";
-              return [
-                `Quadrant: ${pt.quadrant}`,
-                `Projected 60D Return: ${sign}${pt.y}%`,
-                `Risk Volatility Spread: ${pt.x}%`,
-                `Portfolio Weight: ${pt.weight}% ($${pt.val.toLocaleString()})`
-              ];
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          title: {
-            display: true,
-            text: "Risk / Volatility Spread (%)",
-            color: tickColor,
-            font: { size: 11, weight: "bold" }
-          },
-          grid: { color: gridColor },
-          ticks: { color: tickColor, callback: (v) => `${v}%` }
-        },
-        y: {
-          title: {
-            display: true,
-            text: "Expected 60-Day Return (%)",
-            color: tickColor,
-            font: { size: 11, weight: "bold" }
-          },
-          grid: { color: gridColor },
-          ticks: { color: tickColor, callback: (v) => `${v}%` }
-        }
-      }
-    }
-  });
 }
 
 /**
