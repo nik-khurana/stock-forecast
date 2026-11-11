@@ -156,10 +156,10 @@ class AIChatService:
         # 1. Try Groq Cloud if Groq preferred or Groq key present
         if (effective_provider in ("auto", "groq")) and groq_key:
             groq_res = self._call_groq_api(groq_key, system_instruction, sanitized_context, user_message)
-            if groq_res.get("success"):
+            if groq_res.get("success") and groq_res.get("reply") and groq_res["reply"].strip():
                 return {
-                    "reply": groq_res["reply"],
-                    "provider": f"Groq ({groq_res.get('model', 'LLaMA 3.1 8B')})",
+                    "reply": groq_res["reply"].strip(),
+                    "provider": f"Groq ({groq_res.get('model', 'Qwen 27B')})",
                     "anonymized": anonymize
                 }
             elif clean_key and effective_provider == "groq":
@@ -287,13 +287,13 @@ class AIChatService:
             "Content-Type": "application/json"
         }
 
-        # Optimized free candidate models on Groq in priority order
-        # llama-3.1-8b-instant has the highest free TPM/RPM limit and lowest latency
+        # Active free candidate models on Groq in verified priority order
+        # qwen/qwen3.8-27b provides direct answers without exhausting tokens on internal reasoning
+        # openai/gpt-oss-120b and openai/gpt-oss-20b serve as reliable fallback options
         models_to_try = [
-            "llama-3.1-8b-instant",
-            "openai/gpt-oss-20b",
             "qwen/qwen3.8-27b",
-            "openai/gpt-oss-120b"
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b"
         ]
         last_error = ""
         is_rate_limited = False
@@ -314,9 +314,23 @@ class AIChatService:
                     data = resp.json()
                     choices = data.get("choices", [])
                     if choices and "message" in choices[0]:
+                        msg = choices[0]["message"]
+                        reply = (msg.get("content") or "").strip()
+
+                        # Guard against reasoning models consuming tokens on hidden thoughts with empty content
+                        if not reply:
+                            finish_reason = choices[0].get("finish_reason")
+                            reasoning = (msg.get("reasoning") or "").strip()
+                            logger.warning(
+                                "Groq model %s returned empty content (finish_reason=%s, reasoning_len=%d). Trying next model.",
+                                model_name, finish_reason, len(reasoning)
+                            )
+                            last_error = f"{model_name} produced empty text response"
+                            continue
+
                         return {
                             "success": True,
-                            "reply": choices[0]["message"].get("content"),
+                            "reply": reply,
                             "model": model_name
                         }
                 elif resp.status_code == 429:
@@ -343,11 +357,13 @@ class AIChatService:
                                     r_data = retry_resp.json()
                                     r_choices = r_data.get("choices", [])
                                     if r_choices and "message" in r_choices[0]:
-                                        return {
-                                            "success": True,
-                                            "reply": r_choices[0]["message"].get("content"),
-                                            "model": model_name
-                                        }
+                                        r_reply = (r_choices[0]["message"].get("content") or "").strip()
+                                        if r_reply:
+                                            return {
+                                                "success": True,
+                                                "reply": r_reply,
+                                                "model": model_name
+                                            }
                         except Exception:
                             pass
                     # Continue loop to try next model in fallback order

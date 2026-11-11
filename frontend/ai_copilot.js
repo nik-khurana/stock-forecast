@@ -501,7 +501,10 @@
 
     const div = document.createElement("div");
     div.className = "flex items-start space-x-2.5";
-    const parsedHtml = renderSimpleMarkdown(markdown);
+    const textToRender = (typeof markdown === "string" && markdown.trim().length > 0)
+      ? markdown
+      : "*(Analysis generated with empty response. Please check your provider settings or try again.)*";
+    const parsedHtml = renderSimpleMarkdown(textToRender);
 
     div.innerHTML = `
       <div class="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5">

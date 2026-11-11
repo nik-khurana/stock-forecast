@@ -22,9 +22,9 @@ def reload_env():
     platform-injected system variables like $PORT on Railway/Render.
     """
     if ENV_PATH.exists():
-        load_dotenv(dotenv_path=ENV_PATH, override=False)
+        load_dotenv(dotenv_path=ENV_PATH, override=True)
     else:
-        load_dotenv(override=False)
+        load_dotenv(override=True)
 
 # Initial environment load on module import
 reload_env()
