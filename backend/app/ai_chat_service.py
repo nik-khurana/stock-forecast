@@ -18,11 +18,18 @@ Provides private, anonymized financial conversational intelligence for StockCast
 import json
 import logging
 import re
+import threading
+import time
 from typing import Dict, Any, Optional
 import requests
 from backend.app import config
 
 logger = logging.getLogger(__name__)
+
+# Global rate-pacer for external LLM API calls to prevent exceeding Tokens Per Minute (TPM)
+_last_groq_request_time = 0.0
+_groq_lock = threading.Lock()
+MIN_GROQ_REQUEST_INTERVAL = 2.5  # seconds between consecutive Groq calls
 
 class AIChatService:
     def __init__(self):
@@ -30,8 +37,8 @@ class AIChatService:
 
     def sanitize_context_for_privacy(self, context: Dict[str, Any], anonymize: bool = True) -> str:
         """
-        Formats page context into a sanitized system brief for the LLM.
-        When anonymize is True, strictly masks absolute dollar wealth numbers.
+        Formats page context into a compact, token-efficient system brief for the LLM.
+        Drastically minimizes prompt tokens to avoid exceeding Free-Tier Tokens-Per-Minute (TPM) limits.
         """
         page = context.get("page", "single_stock")
         
@@ -44,43 +51,34 @@ class AIChatService:
             milestone_date = context.get("milestone_projected_date", "Calculating...")
             
             if anonymize:
-                # Privacy Mode: Normalize dollar figures into percentage weights & multiples
+                # High-density token-optimized brief (percentage weights only)
                 holdings_summary = []
-                for h in holdings:
+                for h in holdings[:10]:
                     tk = str(h.get("ticker", "ASSET")).upper()
                     sh = float(h.get("shares", 0))
                     bp = float(h.get("buy_price", 0))
                     val = sh * bp
                     weight = round((val / total_val * 100) if total_val > 0 else 0, 1)
-                    holdings_summary.append(f"{tk} ({weight}% allocation)")
+                    holdings_summary.append(f"{tk}:{weight}%")
                 
                 target_multiple = round(milestone_target / total_val, 2) if total_val > 0 else 1.0
                 progress_pct = round((total_val / milestone_target * 100) if milestone_target > 0 else 0, 1)
                 
                 return (
-                    f"PORTFOLIO CONTEXT (FINANCIAL PRIVACY SHIELD ACTIVE - DOLLAR AMOUNTS ANONYMIZED):\n"
-                    f"- Number of active holdings: {len(holdings)}\n"
-                    f"- Asset allocations: {', '.join(holdings_summary) if holdings_summary else 'No holdings yet'}\n"
-                    f"- Projected 60-Day Composite ROI: {roi_60d:+.2f}%\n"
-                    f"- 3-Year Projected CAGR: {cagr:+.2f}%\n"
-                    f"- Goal Milestone Target: {target_multiple}x of baseline equity ({progress_pct}% completed)\n"
-                    f"- Milestone Projected Hit Date: {milestone_date}\n"
-                    f"- Privacy Notice: Exact dollar wealth and account details are concealed for user confidentiality."
+                    f"PORTFOLIO (ANONYMIZED):\n"
+                    f"Holdings ({len(holdings)}): {', '.join(holdings_summary) if holdings_summary else 'None'}\n"
+                    f"60D ROI: {roi_60d:+.2f}% | 3Y CAGR: {cagr:+.2f}%\n"
+                    f"Milestone: {target_multiple}x target ({progress_pct}% met, Date: {milestone_date})"
                 )
             else:
-                # Full Context Mode: Include explicit dollar figures
-                holdings_str = ", ".join([f"{h.get('shares')} {h.get('ticker')} @ ${h.get('buy_price')}" for h in holdings])
+                holdings_str = ", ".join([f"{h.get('shares')} {h.get('ticker')}@${h.get('buy_price')}" for h in holdings[:10]])
                 return (
-                    f"PORTFOLIO CONTEXT (FULL DOLLAR METRICS):\n"
-                    f"- Total Current Portfolio Equity: ${total_val:,.2f}\n"
-                    f"- Active Positions: {holdings_str}\n"
-                    f"- Projected 60-Day Composite ROI: {roi_60d:+.2f}%\n"
-                    f"- 3-Year Projected CAGR: {cagr:+.2f}%\n"
-                    f"- Financial Goal Milestone Target: ${milestone_target:,.2f}\n"
-                    f"- Milestone Projected Hit Date: {milestone_date}"
+                    f"PORTFOLIO (FULL):\n"
+                    f"Equity: ${total_val:,.2f} | Positions: {holdings_str}\n"
+                    f"60D ROI: {roi_60d:+.2f}% | 3Y CAGR: {cagr:+.2f}%\n"
+                    f"Milestone: ${milestone_target:,.2f} (Date: {milestone_date})"
                 )
         else:
-            # Single Stock context
             ticker = str(context.get("ticker", "STOCK")).upper()
             price = float(context.get("price", 0.0))
             sup_floor = float(context.get("support_floor", 0.0))
@@ -93,12 +91,9 @@ class AIChatService:
             y3_target = float(context.get("forecast_3y_target", 0.0))
             
             return (
-                f"SINGLE STOCK CONTEXT FOR {ticker}:\n"
-                f"- Current Market Price: ${price:.2f}\n"
-                f"- 30-Day Forecast Range: Min ${d_min:.2f} | Expected Median ${d_mean:.2f} | Max ${d_max:.2f}\n"
-                f"- 3-Year Multi-Year Horizon Target: ${y3_target:.2f}\n"
-                f"- 99% Critical Downside Support Floor: ${sup_floor:.2f} (Buffer: +{cushion_pct:.1f}%)\n"
-                f"- AI NLP Market News Sentiment: {sentiment_score:+.1f} ({sentiment_class})"
+                f"STOCK {ticker}: Price ${price:.2f} | 30D: ${d_min:.2f}-${d_max:.2f} (Exp ${d_mean:.2f}) | "
+                f"3Y Target ${y3_target:.2f} | 99% Support Floor ${sup_floor:.2f} (+{cushion_pct:.1f}%) | "
+                f"News Sentiment: {sentiment_score:+.1f} ({sentiment_class})"
             )
 
     def generate_chat_response(
@@ -116,11 +111,9 @@ class AIChatService:
         sanitized_context = self.sanitize_context_for_privacy(context, anonymize=anonymize)
         
         system_instruction = (
-            "You are StockCast AI, an institutional-grade quantitative financial analyst and personal wealth strategist. "
-            "You provide data-driven, mathematically sound, concise, and actionable answers in GitHub-flavored Markdown. "
-            "You explain volatility diffusion, compound annual growth rate (CAGR), downside support floors, milestone trajectories, "
-            "and diversification risk. Always include an investment disclaimer that forecasts are probabilistic machine learning estimates, "
-            "not guaranteed financial advice."
+            "You are StockCast AI, an institutional quantitative financial analyst and personal wealth strategist. "
+            "Provide concise, data-driven answers in Markdown. Explain probability, support floors, CAGR, "
+            "and volatility. ML forecasts are probabilistic estimates, not financial advice."
         )
 
         # Sanitize custom key
@@ -166,22 +159,48 @@ class AIChatService:
             if groq_res.get("success"):
                 return {
                     "reply": groq_res["reply"],
-                    "provider": f"Groq ({groq_res.get('model', 'LLaMA 3.3 70B')})",
+                    "provider": f"Groq ({groq_res.get('model', 'LLaMA 3.1 8B')})",
                     "anonymized": anonymize
                 }
             elif clean_key and effective_provider == "groq":
-                # User provided custom Groq key that encountered an error - return diagnostic info
                 err_msg = groq_res.get("error", "Failed to connect to Groq Cloud API")
                 quant_fallback = self._generate_quantitative_reasoning_reply(user_message, context, anonymize)
+
+                # Graceful handling for rate limits (TPM / RPM)
+                if groq_res.get("rate_limited") or "rate limit" in err_msg.lower() or "429" in err_msg:
+                    notice = (
+                        "> ⚡ **Groq Free Tier Rate Limit Notice** *(Token quota active on free tier; response paced).* "
+                        "Here is your real-time analysis generated via the **StockCast Institutional Quantitative Engine**:\n\n"
+                        f"{quant_fallback}"
+                    )
+                    return {
+                        "reply": notice,
+                        "provider": "StockCast Quant Engine (Rate-Limit Fallback)",
+                        "anonymized": anonymize
+                    }
+
+                # Authentication / Invalid key error
+                if "401" in err_msg or "invalid api key" in err_msg.lower():
+                    return {
+                        "reply": (
+                            f"### ⚠️ Groq Cloud Authentication Notice\n\n"
+                            f"Your Groq API key was rejected (`Invalid API Key`). "
+                            f"Please verify or generate a new key from [Groq Console](https://console.groq.com/keys) (starts with `gsk_`).\n\n"
+                            f"---\n\n"
+                            f"{quant_fallback}"
+                        ),
+                        "provider": "Groq Key Diagnostic + Quant Fallback",
+                        "anonymized": anonymize
+                    }
+
                 return {
                     "reply": (
-                        f"### ⚠️ Groq Cloud Notice\n\n"
-                        f"Groq API returned an error: `{err_msg}`\n\n"
-                        f"Please verify your key from [Groq Console](https://console.groq.com/keys) (starts with `gsk_`).\n\n"
+                        f"### ⚠️ Groq Notice\n\n"
+                        f"Groq API connection status: `{err_msg}`\n\n"
                         f"---\n\n"
                         f"{quant_fallback}"
                     ),
-                    "provider": "Groq Error Diagnostic + Quant Fallback",
+                    "provider": "Groq Diagnostic + Quant Fallback",
                     "anonymized": anonymize
                 }
 
@@ -246,8 +265,18 @@ class AIChatService:
 
     def _call_groq_api(self, api_key: str, system_prompt: str, context_str: str, message: str) -> Dict[str, Any]:
         """
-        Calls Groq Cloud API with model fallback: llama-3.3-70b-versatile -> llama-3.1-8b-instant.
+        Calls Groq Cloud API with rate-pacing, TPM optimization, and multi-model fallback.
+        Priority: llama-3.1-8b-instant -> openai/gpt-oss-20b -> qwen/qwen3.8-27b -> openai/gpt-oss-120b.
         """
+        global _last_groq_request_time
+        with _groq_lock:
+            elapsed = time.time() - _last_groq_request_time
+            if elapsed < MIN_GROQ_REQUEST_INTERVAL:
+                sleep_sec = MIN_GROQ_REQUEST_INTERVAL - elapsed
+                logger.info("Pacing Groq API request: pausing %.2fs to prevent TPM rate limits", sleep_sec)
+                time.sleep(sleep_sec)
+            _last_groq_request_time = time.time()
+
         clean_key = api_key.strip().strip("\"'")
         if clean_key.startswith("Bearer "):
             clean_key = clean_key[7:].strip()
@@ -258,15 +287,16 @@ class AIChatService:
             "Content-Type": "application/json"
         }
 
-        # Candidate free models on Groq in priority order
+        # Optimized free candidate models on Groq in priority order
+        # llama-3.1-8b-instant has the highest free TPM/RPM limit and lowest latency
         models_to_try = [
-            "qwen/qwen3.8-27b",
-            "openai/gpt-oss-120b",
+            "llama-3.1-8b-instant",
             "openai/gpt-oss-20b",
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant"
+            "qwen/qwen3.8-27b",
+            "openai/gpt-oss-120b"
         ]
         last_error = ""
+        is_rate_limited = False
 
         for model_name in models_to_try:
             try:
@@ -277,7 +307,7 @@ class AIChatService:
                         {"role": "user", "content": message}
                     ],
                     "temperature": 0.35,
-                    "max_tokens": 800
+                    "max_tokens": 450  # Compact token ceiling to prevent exhausting 8,000 TPM limit
                 }
                 resp = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
                 if resp.status_code == 200:
@@ -289,6 +319,39 @@ class AIChatService:
                             "reply": choices[0]["message"].get("content"),
                             "model": model_name
                         }
+                elif resp.status_code == 429:
+                    is_rate_limited = True
+                    err_json = {}
+                    try:
+                        err_json = resp.json()
+                    except Exception:
+                        pass
+                    msg = err_json.get("error", {}).get("message") or resp.text[:200]
+                    last_error = f"HTTP 429: {msg}"
+                    logger.warning("Groq rate limit on %s: %s", model_name, msg)
+
+                    # Check if retry wait is brief (<= 3.0 seconds)
+                    wait_match = re.search(r"try again in ([0-9.]+)s", msg)
+                    if wait_match:
+                        try:
+                            wait_sec = float(wait_match.group(1))
+                            if wait_sec <= 3.0:
+                                logger.info("Short Groq rate limit: sleeping %.2fs before single retry", wait_sec + 0.3)
+                                time.sleep(wait_sec + 0.3)
+                                retry_resp = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+                                if retry_resp.status_code == 200:
+                                    r_data = retry_resp.json()
+                                    r_choices = r_data.get("choices", [])
+                                    if r_choices and "message" in r_choices[0]:
+                                        return {
+                                            "success": True,
+                                            "reply": r_choices[0]["message"].get("content"),
+                                            "model": model_name
+                                        }
+                        except Exception:
+                            pass
+                    # Continue loop to try next model in fallback order
+                    continue
                 else:
                     err_json = {}
                     try:
@@ -304,7 +367,7 @@ class AIChatService:
                 last_error = str(e)
                 logger.error("Groq API request failed on %s: %s", model_name, e)
 
-        return {"success": False, "reply": None, "error": last_error}
+        return {"success": False, "reply": None, "error": last_error, "rate_limited": is_rate_limited}
 
     def _call_openrouter_api(self, api_key: str, system_prompt: str, context_str: str, message: str) -> Optional[str]:
         try:

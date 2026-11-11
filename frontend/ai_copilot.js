@@ -534,6 +534,17 @@
     if (isSubmitting) return;
     isSubmitting = true;
 
+    const input = document.getElementById("ai-copilot-input");
+    const sendBtn = document.getElementById("ai-copilot-send-btn");
+    if (input) {
+      input.disabled = true;
+      input.placeholder = "Pacing AI response...";
+    }
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.classList.add("opacity-50", "pointer-events-none");
+    }
+
     appendUserMessage(text);
     const typing = appendBotTypingIndicator();
 
@@ -575,7 +586,20 @@
         anonymizeMode
       );
     } finally {
-      isSubmitting = false;
+      // Pacing delay (2.0s) between submissions to protect free-tier Tokens-Per-Minute (TPM) limits
+      setTimeout(() => {
+        isSubmitting = false;
+        if (input) {
+          input.disabled = false;
+          const isPortfolio = window.location.pathname.includes("portfolio") || !!document.getElementById("portfolio-holdings-tbody");
+          input.placeholder = isPortfolio ? "Ask about your portfolio, milestone, risk..." : "Ask about price targets, floors, outlook...";
+          input.focus();
+        }
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.classList.remove("opacity-50", "pointer-events-none");
+        }
+      }, 2000);
     }
   }
 
