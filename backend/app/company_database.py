@@ -10,8 +10,17 @@ Enables intelligent full-text search across:
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
+import requests
+
+from backend.app.config import (
+    get_alpaca_key_id,
+    get_alpaca_secret_key,
+    get_alpaca_base_url,
+    is_alpaca_configured
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,12 +122,66 @@ COMPANIES_DB: List[Dict[str, str]] = [
     {"ticker": "DIA", "name": "SPDR Dow Jones Industrial Average ETF", "aliases": "Dow Jones Industrial Average DJIA 30 Blue Chip"},
     {"ticker": "VOO", "name": "Vanguard S&P 500 ETF", "aliases": "Vanguard S&P 500 Index Low Cost"},
     {"ticker": "VTI", "name": "Vanguard Total Stock Market ETF", "aliases": "Vanguard Total Stock Market Broad Index"},
-    {"ticker": "SPCX", "name": "Space Exploration Technologies Corp. / SPAC ETF", "aliases": "SPAC SpaceX Pre-Merger Blank Check Active ETF CrossingBridge"},
+    {"ticker": "SPCX", "name": "Space Exploration Technologies Corp. / SPAC ETF", "aliases": "SPAC SpaceX Pre-Merger Blank Check Active ETF CrossingBridge Starlink"},
+
+    # Frontier AI, Newly Listed & Upcoming IPO Equities
+    {"ticker": "ANTH", "name": "Anthropic, PBC", "aliases": "Anthropic Claude Claude 3.5 Sonnet Opus Dario Amodei AI LLM Chatbot Safety Frontier Model"},
+    {"ticker": "STRPE", "name": "Stripe, Inc.", "aliases": "Stripe Payments FinTech Online Checkout Patrick Collison John Collison"},
+    {"ticker": "DBRX", "name": "Databricks, Inc.", "aliases": "Databricks Apache Spark Lakehouse AI Ali Ghodsi Enterprise Data"},
 ]
 
 DATA_FILE = Path(__file__).resolve().parent / "data" / "alpaca_assets.json"
 _ALPACA_ASSETS: List[Dict[str, str]] = []
 _TICKER_NAME_MAP: Dict[str, str] = {}
+_LAST_SYNC_TIME: float = 0.0
+
+def sync_alpaca_assets_live(force: bool = False) -> int:
+    """
+    Syncs newly listed and active US equities directly from Alpaca's live asset directory.
+    Automatically captures new IPOs, SPACs, and ticker additions as soon as they list on NASDAQ/NYSE.
+    """
+    global _ALPACA_ASSETS, _TICKER_NAME_MAP, _LAST_SYNC_TIME
+    now = time.time()
+    # Cache for 12 hours (43200s) unless forced
+    if not force and _ALPACA_ASSETS and (now - _LAST_SYNC_TIME < 43200):
+        return len(_ALPACA_ASSETS)
+
+    if not is_alpaca_configured():
+        return len(_ALPACA_ASSETS)
+
+    try:
+        url = f"{get_alpaca_base_url()}/assets?status=active&asset_class=us_equity"
+        headers = {
+            "APCA-API-KEY-ID": get_alpaca_key_id(),
+            "APCA-API-SECRET-KEY": get_alpaca_secret_key(),
+            "Accept": "application/json"
+        }
+        resp = requests.get(url, headers=headers, timeout=12)
+        if resp.status_code == 200:
+            raw = resp.json()
+            new_assets = []
+            for item in raw:
+                tk = item.get("symbol", "").strip().upper()
+                nm = item.get("name", "").strip()
+                if tk and nm:
+                    new_assets.append({"ticker": tk, "name": nm})
+                    _TICKER_NAME_MAP[tk] = nm
+
+            if new_assets:
+                _ALPACA_ASSETS = new_assets
+                _LAST_SYNC_TIME = now
+                try:
+                    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    with open(DATA_FILE, "w", encoding="utf-8") as f:
+                        json.dump(new_assets, f, indent=2)
+                except Exception as e:
+                    logger.debug(f"Could not persist assets cache file: {e}")
+                logger.info(f"[CompanyDatabase] Successfully synced {len(new_assets)} live US equities from Alpaca.")
+                return len(new_assets)
+    except Exception as exc:
+        logger.warning(f"[CompanyDatabase] Live asset sync failed ({exc}). Retaining cached assets.")
+
+    return len(_ALPACA_ASSETS)
 
 def _load_alpaca_assets() -> List[Dict[str, str]]:
     """Loads active US equities dataset cached from Alpaca (14,000+ tradable assets)."""

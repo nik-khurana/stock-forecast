@@ -19,6 +19,7 @@ import os
 import re
 import time
 import logging
+import threading
 from typing import Optional, Literal, Dict, List, Any
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -39,7 +40,7 @@ from backend.app.config import (
 )
 from backend.app.alpaca_client import AlpacaClient
 from backend.app.forecast_service import ForecastService
-from backend.app.company_database import search_companies, resolve_ticker
+from backend.app.company_database import search_companies, resolve_ticker, sync_alpaca_assets_live
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -213,6 +214,15 @@ app = FastAPI(
     description="Machine Learning Stock Price Forecasting with Alpaca Market Data",
     version="1.2.0"
 )
+
+@app.on_event("startup")
+def on_startup_sync_assets():
+    """
+    Background worker on server startup:
+    Syncs newly listed IPO assets from Alpaca Market Data so freshly listed companies
+    (like Anthropic on listing day) are immediately searchable and tradable.
+    """
+    threading.Thread(target=sync_alpaca_assets_live, daemon=True).start()
 
 # -------------------------------------------------------------
 # Security Headers Middleware & CORS Configuration
