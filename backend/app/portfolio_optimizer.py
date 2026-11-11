@@ -103,6 +103,9 @@ class PortfolioOptimizer:
                 spy_returns = None
 
         # Align series to common minimum length
+        if len(returns_dict) < len(tickers):
+            return self._build_heuristic_optimization(holdings, risk_profile)
+
         min_len = min((len(v) for v in returns_dict.values()), default=0)
         if min_len < 30:
             # Fallback if history is insufficient

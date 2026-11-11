@@ -38,6 +38,22 @@ function getMsUntilNext10MinMark() {
   return msUntilNext > 0 ? msUntilNext : 600000;
 }
 
+/**
+ * Formats a Date object into US Eastern Time (e.g. "1:30 PM ET").
+ */
+function getFormattedETTime(dateObj = new Date()) {
+  try {
+    return dateObj.toLocaleTimeString("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    }) + " ET";
+  } catch (e) {
+    return dateObj.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+}
+
 // Chart.js instances
 let forecastChart = null;
 let dailyForecastChart = null;
@@ -644,18 +660,19 @@ function syncLiveStreaming() {
       badge.classList.remove("hidden");
       badge.classList.add("flex");
       const labelSpan = badge.querySelector("span:not(#live-stream-dot)");
+      const lastUpdateStr = `Last Updated: ${getFormattedETTime()}`;
       if (currentMarketSession === "pre_market") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10m Pre-Market Sync";
+        if (labelSpan) labelSpan.textContent = lastUpdateStr;
       } else if (currentMarketSession === "after_hours") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-indigo-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10m After-Hours Sync";
+        if (labelSpan) labelSpan.textContent = lastUpdateStr;
       } else {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10m Sync (:00, :10...)";
+        if (labelSpan) labelSpan.textContent = lastUpdateStr;
       }
     } else {
       badge.classList.add("hidden");
@@ -936,7 +953,16 @@ function renderDashboard(data, isLiveUpdate = false) {
   const priceTsElem = document.getElementById("price-timestamp");
   if (priceTsElem) {
     const tsStr = data.as_of_formatted || (quote && quote.timestamp_formatted);
-    priceTsElem.textContent = tsStr ? `As of ${tsStr}` : `As of ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    priceTsElem.textContent = tsStr ? `As of ${tsStr}` : `As of ${getFormattedETTime()}`;
+  }
+
+  // Header Live Badge Last Updated Time
+  const liveBadge = document.getElementById("live-stream-badge");
+  const liveBadgeText = document.getElementById("live-stream-text");
+  if (liveBadge && liveBadgeText) {
+    liveBadge.classList.remove("hidden");
+    liveBadge.classList.add("flex");
+    liveBadgeText.textContent = `Last Updated: ${getFormattedETTime()}`;
   }
 
   // Extended Session & Live Price Header Labeling

@@ -59,6 +59,7 @@ COMPANIES_DB: List[Dict[str, str]] = [
     {"ticker": "CRWD", "name": "CrowdStrike Holdings, Inc.", "aliases": "CrowdStrike Falcon Cybersecurity EDR George Kurtz"},
     {"ticker": "SNOW", "name": "Snowflake Inc.", "aliases": "Snowflake Data Cloud Warehouse Sridhar Ramaswamy"},
     {"ticker": "MSTR", "name": "MicroStrategy Inc.", "aliases": "Microstrategy Bitcoin Treasury Michael Saylor"},
+    {"ticker": "ANT", "name": "Anthropic PBC (Pre-IPO)", "aliases": "Anthropic Claude AI LLM Artificial Intelligence Dario Amodei IPO Nov 19"},
 
     # Finance, Banking & Payments
     {"ticker": "JPM", "name": "JPMorgan Chase & Co.", "aliases": "JP Morgan Chase Bank Jamie Dimon Wall Street"},
@@ -388,6 +389,7 @@ SECTOR_MAPPINGS: Dict[str, str] = {
     "SPY": "S&P 500 Index ETF", "VOO": "S&P 500 Index ETF", "VTI": "Total US Stock Market ETF",
     "QQQ": "Nasdaq 100 Tech ETF", "IWM": "Russell 2000 Small-Cap ETF", "DIA": "Dow Jones Industrial ETF",
     "SPCX": "Space & Pre-Merger ETF",
+    "ANT": "Technology & AI (Pre-IPO)",
 }
 
 def get_company_sector(ticker: str) -> str:

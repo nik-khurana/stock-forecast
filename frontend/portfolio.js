@@ -47,6 +47,22 @@ function getMsUntilNext10MinMark() {
   return msUntilNext > 0 ? msUntilNext : 600000;
 }
 
+/**
+ * Formats a Date object into US Eastern Time (e.g. "1:30 PM ET").
+ */
+function getFormattedETTime(dateObj = new Date()) {
+  try {
+    return dateObj.toLocaleTimeString("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    }) + " ET";
+  } catch (e) {
+    return dateObj.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+}
+
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
@@ -789,22 +805,6 @@ function initPortfolioEventListeners() {
     });
   }
 
-  // Modern Portfolio Theory (MPT) Strategy Profile Tabs
-  document.querySelectorAll(".optimizer-profile-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".optimizer-profile-tab").forEach((t) => {
-        t.classList.remove("active");
-        t.className = "optimizer-profile-tab px-3 py-1.5 rounded-xl font-semibold transition text-slate-400 hover:text-slate-900 dark:hover:text-white";
-      });
-      tab.classList.add("active");
-      tab.className = "optimizer-profile-tab active px-3 py-1.5 rounded-xl font-semibold transition";
-      selectedOptimizerProfile = tab.getAttribute("data-profile") || "balanced";
-      if (currentOptimizationData && portfolioForecastData) {
-        updateOptimizerProfileView(currentOptimizationData, portfolioForecastData.current_portfolio_value);
-      }
-    });
-  });
-
   // Macro Stress-Testing Interactive Shock Slider
   const shockSlider = document.getElementById("macro-shock-slider");
   if (shockSlider) {
@@ -1274,9 +1274,10 @@ function renderHoldingsTable() {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition";
 
-    let livePriceStr = "...";
-    let currValStr = "...";
-    let pnlStr = "...";
+    const costBasisNum = h.shares * h.buy_price;
+    let livePriceStr = `$${h.buy_price.toFixed(2)}`;
+    let currValStr = `$${costBasisNum.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    let pnlStr = "$0.00 (0.00%)";
     let pnlColor = "text-slate-400";
     let weightStr = "...";
     let tsSubtext = "";
@@ -1288,7 +1289,7 @@ function renderHoldingsTable() {
         currValStr = `$${match.current_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         const sign = match.pnl >= 0 ? "+" : "";
         pnlStr = `${sign}$${match.pnl.toFixed(2)} (${sign}${match.pnl_pct.toFixed(2)}%)`;
-        pnlColor = match.pnl >= 0 ? "text-emerald-500" : "text-rose-500";
+        pnlColor = match.pnl > 0 ? "text-emerald-500" : (match.pnl < 0 ? "text-rose-500" : "text-slate-400");
         weightStr = `${match.weight_pct}%`;
         if (match.quote_timestamp_formatted || match.quote_timestamp) {
           const displayTs = match.quote_timestamp_formatted || match.quote_timestamp;
@@ -1604,8 +1605,17 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
 
   const portTsElem = document.getElementById("portfolio-price-timestamp");
   if (portTsElem) {
-    const tsStr = data.as_of_formatted || (data.as_of_timestamp ? new Date(data.as_of_timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null);
-    portTsElem.textContent = tsStr ? `As of ${tsStr}` : `As of ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const tsStr = data.as_of_formatted || (data.as_of_timestamp ? getFormattedETTime(new Date(data.as_of_timestamp * 1000)) : getFormattedETTime());
+    portTsElem.textContent = tsStr ? `As of ${tsStr}` : `As of ${getFormattedETTime()}`;
+  }
+
+  // Header Live Badge Last Updated Time
+  const portLiveBadge = document.getElementById("portfolio-live-badge");
+  const portLiveText = document.getElementById("portfolio-live-text");
+  if (portLiveBadge && portLiveText) {
+    portLiveBadge.classList.remove("hidden");
+    portLiveBadge.classList.add("flex");
+    portLiveText.textContent = `Last Updated: ${getFormattedETTime()}`;
   }
 
   const isPos = data.total_unrealized_pnl >= 0;
@@ -1682,11 +1692,6 @@ function renderPortfolioDashboard(data, isLiveUpdate = false) {
   // Sector Allocation Donut & Concentration Guardrail
   if (data.sector_allocation && data.concentration_risk) {
     renderSectorAllocation(data.sector_allocation, data.concentration_risk, data.current_portfolio_value);
-  }
-
-  // Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
-  if (data.portfolio_optimization) {
-    renderPortfolioOptimizer(data.portfolio_optimization, data.current_portfolio_value);
   }
 
   // Macro Stress-Testing & Market Crash Simulator
@@ -2216,113 +2221,6 @@ function renderSectorAllocation(sectors, concentrationRisk, totalValue) {
 /**
  * Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
  */
-let currentOptimizationData = null;
-let selectedOptimizerProfile = "balanced";
-
-function renderPortfolioOptimizer(optData, currentVal) {
-  currentOptimizationData = optData;
-  updateOptimizerProfileView(optData, currentVal);
-}
-
-function updateOptimizerProfileView(optData, currentVal) {
-  if (!optData || !optData.profiles) return;
-  const profile = optData.profiles[selectedOptimizerProfile] || optData.profiles["balanced"];
-  if (!profile) return;
-
-  const curMetrics = optData.current_metrics || {};
-
-  // Sharpe comparison
-  const curSharpe = curMetrics.sharpe_ratio !== undefined ? curMetrics.sharpe_ratio : 0;
-  const tgtSharpe = profile.sharpe_ratio !== undefined ? profile.sharpe_ratio : 0;
-  const curSharpeElem = document.getElementById("opt-current-sharpe");
-  const tgtSharpeElem = document.getElementById("opt-target-sharpe");
-  const sharpeDeltaElem = document.getElementById("opt-sharpe-delta");
-
-  if (curSharpeElem) curSharpeElem.textContent = curSharpe.toFixed(2);
-  if (tgtSharpeElem) tgtSharpeElem.textContent = tgtSharpe.toFixed(2);
-  if (sharpeDeltaElem) {
-    const diff = tgtSharpe - curSharpe;
-    const sign = diff >= 0 ? "+" : "";
-    sharpeDeltaElem.textContent = `${sign}${diff.toFixed(2)} Sharpe Improvement (${profile.name})`;
-    sharpeDeltaElem.className = diff >= 0 ? "text-[11px] font-semibold text-emerald-500" : "text-[11px] font-semibold text-rose-500";
-  }
-
-  // Volatility comparison
-  const curVol = curMetrics.annual_volatility_pct !== undefined ? curMetrics.annual_volatility_pct : 0;
-  const tgtVol = profile.annual_volatility_pct !== undefined ? profile.annual_volatility_pct : 0;
-  const curVolElem = document.getElementById("opt-current-vol");
-  const tgtVolElem = document.getElementById("opt-target-vol");
-  const volDeltaElem = document.getElementById("opt-vol-delta");
-
-  if (curVolElem) curVolElem.textContent = `${curVol.toFixed(1)}%`;
-  if (tgtVolElem) tgtVolElem.textContent = `${tgtVol.toFixed(1)}%`;
-  if (volDeltaElem) {
-    const diff = tgtVol - curVol;
-    const sign = diff >= 0 ? "+" : "";
-    const isGood = diff <= 0;
-    volDeltaElem.textContent = `${sign}${diff.toFixed(1)}% Volatility Shift`;
-    volDeltaElem.className = isGood ? "text-[11px] font-semibold text-cyan-500" : "text-[11px] font-semibold text-amber-500";
-  }
-
-  // Return comparison
-  const curRet = curMetrics.expected_annual_return_pct !== undefined ? curMetrics.expected_annual_return_pct : 0;
-  const tgtRet = profile.expected_annual_return_pct !== undefined ? profile.expected_annual_return_pct : 0;
-  const curRetElem = document.getElementById("opt-current-ret");
-  const tgtRetElem = document.getElementById("opt-target-ret");
-  const retDeltaElem = document.getElementById("opt-ret-delta");
-
-  if (curRetElem) curRetElem.textContent = `${curRet.toFixed(1)}%`;
-  if (tgtRetElem) tgtRetElem.textContent = `${tgtRet.toFixed(1)}%`;
-  if (retDeltaElem) {
-    const diff = tgtRet - curRet;
-    const sign = diff >= 0 ? "+" : "";
-    retDeltaElem.textContent = `${sign}${diff.toFixed(1)}% Annual Alpha`;
-    retDeltaElem.className = diff >= 0 ? "text-[11px] font-semibold text-indigo-500" : "text-[11px] font-semibold text-slate-400";
-  }
-
-  // Rebalancing trades table
-  const tbody = document.getElementById("rebalancing-tbody");
-  const summaryElem = document.getElementById("rebalance-status-summary");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  const trades = profile.rebalancing_trades || [];
-  if (summaryElem) {
-    const activeMoves = trades.filter((t) => t.action !== "Hold").length;
-    summaryElem.textContent = `${activeMoves} trade recommendations for ${profile.name}`;
-  }
-
-  trades.forEach((t) => {
-    const tr = document.createElement("tr");
-    tr.className = "hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition";
-
-    let actionBadgeClass = "bg-slate-500/10 text-slate-400 border-slate-500/20";
-    if (t.action === "Increase") actionBadgeClass = "bg-emerald-500/15 text-emerald-500 border-emerald-500/30 font-bold";
-    if (t.action === "Reduce") actionBadgeClass = "bg-amber-500/15 text-amber-500 border-amber-500/30 font-bold";
-
-    const shiftSign = t.weight_delta_pct >= 0 ? "+" : "";
-    const dollarSign = t.dollar_delta >= 0 ? "+" : "-";
-
-    tr.innerHTML = `
-      <td class="py-2.5 px-4 font-bold text-slate-900 dark:text-white uppercase">${escapeHtml(t.ticker)}</td>
-      <td class="py-2.5 px-4 text-right text-slate-500 dark:text-slate-400">${t.current_weight_pct.toFixed(1)}%</td>
-      <td class="py-2.5 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400">${t.target_weight_pct.toFixed(1)}%</td>
-      <td class="py-2.5 px-4 text-right font-semibold ${t.weight_delta_pct >= 0 ? 'text-emerald-500' : 'text-rose-500'}">
-        ${shiftSign}${t.weight_delta_pct.toFixed(1)}%
-      </td>
-      <td class="py-2.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-white privacy-value">
-        ${dollarSign}$${Math.abs(t.dollar_delta).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-      </td>
-      <td class="py-2.5 px-4 text-center">
-        <span class="text-[10px] px-2 py-0.5 rounded-full border uppercase ${actionBadgeClass}">
-          ${t.action}
-        </span>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
 /**
  * Macro Stress-Testing & Market Crash Simulator
  */
@@ -2495,18 +2393,19 @@ function syncPortfolioLiveStreaming() {
       badge.classList.remove("hidden");
       badge.classList.add("flex");
       const labelSpan = badge.querySelector("span:not(#portfolio-live-dot)");
+      const lastUpdateStr = `Last Updated: ${getFormattedETTime()}`;
       if (currentMarketSession === "pre_market") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10m Pre-Market Sync";
+        if (labelSpan) labelSpan.textContent = lastUpdateStr;
       } else if (currentMarketSession === "after_hours") {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-indigo-400 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10m After-Hours Sync";
+        if (labelSpan) labelSpan.textContent = lastUpdateStr;
       } else {
         if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
         badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md";
-        if (labelSpan) labelSpan.textContent = "10m Sync (:00, :10...)";
+        if (labelSpan) labelSpan.textContent = lastUpdateStr;
       }
     } else {
       badge.classList.add("hidden");

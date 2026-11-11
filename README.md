@@ -1,18 +1,20 @@
 # StockCast ML: Institutional-Grade Stock & Portfolio Price Forecasting Application
 
-An advanced quantitative forecasting and portfolio risk intelligence platform powered by **Alpaca Market Data API (v2)**, **Machine Learning** (Quantile Gradient Boosted Trees, Regularized Ridge Regression, Geometric Volatility Diffusion, and Blended Ensembles), **Modern Portfolio Theory (MPT)**, **Real-Time Financial NLP Sentiment Analysis**, and a responsive Apple-glass interactive dashboard.
+An advanced quantitative forecasting and portfolio risk intelligence platform powered by **Alpaca Market Data API (v2)**, **Machine Learning** (Quantile Gradient Boosted Trees, Regularized Ridge Regression, Geometric Volatility Diffusion, and Blended Ensembles), **Pre-IPO & Unlisted Asset Tracking**, **Macro Stress-Testing**, **Real-Time Financial NLP Sentiment Analysis**, and a responsive Apple-glass interactive dashboard.
 
 ---
 
 ## 🌟 Comprehensive Feature Suite
 
-### 1. 📐 Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer
-* **Markowitz Mean-Variance SLSQP Solver**: Calculates the optimal risk-return weights along the Markowitz Efficient Frontier.
-* **Three Selectable Strategy Profiles**:
-  * **Balanced (Max Sharpe Ratio)**: Maximizes risk-adjusted excess returns per unit of volatility ($\text{Sharpe} = \frac{R_p - R_f}{\sigma_p}$).
-  * **Conservative (Minimum Volatility)**: Minimizes portfolio variance ($\sigma_p$) and capital drawdowns.
-  * **Aggressive (Growth / Return-Seeking)**: Overweights top-momentum growth assets within bounded diversification constraints.
-* **Automated Trade Suggestions**: Day-by-day and dollar-by-dollar rebalancing recommendations with explicit "Increase", "Reduce", or "Hold" trade actions.
+### 1. 🦄 Pre-IPO & Unlisted Asset Baseline Tracking (e.g. Anthropic ANT, Stripe, SpaceX)
+* **Unlisted Asset Integration**: Add private, pre-IPO, or OTC stock positions (such as Anthropic `ANT` ahead of its Nov 19 IPO, `STRIPE`, or `SPACEX`) with custom purchase prices and share quantities.
+* **Full Capital & Horizon Inclusion**: Invested capital ($3,900 for 50 shares @ $78) is accurately credited across **all portfolio totals**:
+  * Total Invested Cost Basis (`$3,900.00`)
+  * Current Portfolio Valuation (`$3,900.00`)
+  * Critical Hard Support Floor (`$3,900.00`)
+  * 60-Day Aggregate Daily Forecast Envelope
+  * 3-Year Multi-Year Monthly Projections
+* **Pre-IPO Baseline Reporting**: Displays clear `Pre-IPO Baseline` badges in holding tables and prevents missing data or crash errors.
 
 ### 2. 📰 Real-Time AI News & Financial NLP Sentiment Analysis
 * **Live Market Wires**: Directly ingests real-time breaking market news via Alpaca's news stream.
@@ -63,9 +65,9 @@ An advanced quantitative forecasting and portfolio risk intelligence platform po
 * **Blended Ensemble**: Adaptive stacking blending GBDT and Ridge for optimal out-of-sample stability.
 * **Multi-Horizon Diffusion**: 30-day continuous daily forecasts and 36-month geometric trend drift.
 
-### 11. ⏱️ 10-Minute Synchronized Pricing, Sequential Queue & Resource Hardening
+### 11. ⏱️ 10-Minute Synchronized Pricing, Eastern Time Displays & Sequential Queue
 * **Synchronized 10-Minute Cadence**: Automatic price streaming aligned strictly to wall-clock marks (`:00, :10, :20, :30, :40, :50`), eliminating excessive request bursts and server load.
-* **Live Price Timestamps**: Displays formatted quote timestamps (`As of 12:10 PM UTC/EST`) on both the single stock card and individual owned positions in the portfolio table.
+* **Eastern Time (`ET`) & Local Timestamps**: Displays formatted timestamps in US Eastern Time (`Last Updated: 1:30 PM ET`, `As of Nov 11, 2026 01:30 PM ET`) on top header badges, single stock quote cards, and individual owned positions, eliminating confusing UTC timestamps.
 * **Sequential Queue Processing**: Multi-asset portfolio calculations are processed one-by-one in an orderly queue with explicit memory deallocation (`gc.collect()`), keeping peak RAM under 200 MB.
 * **Strict 2 vCPU / 1000 MB RAM Guardrails**: Hard-caps OpenMP/MKL thread pools (`OMP_NUM_THREADS=1`) and serializes requests via `asyncio.Lock` to guarantee stability and prevent container OOM termination on Railway.
 
@@ -81,7 +83,6 @@ flowchart TD
         SingleStock["Single Stock Dashboard (/)"]
         PortfolioDash["Portfolio Dashboard (/portfolio)"]
         SectorDonut["Sector Allocation & HHI Donut"]
-        OptimizerUI["MPT Optimizer & Rebalancing Tabs"]
         SimulatorUI["Macro Shock Slider & Crash Cards"]
         NewsUI["Live AI News & NLP Sentiment"]
         PDFExport["Institutional PDF Memo Engine"]
@@ -91,7 +92,7 @@ flowchart TD
     subgraph Backend ["FastAPI Application (backend/app/)"]
         Router["REST Endpoints (main.py)"]
         ForecastSvc["Forecast Service (forecast_service.py)"]
-        OptimizerEngine["MPT Optimizer & Beta Solver (portfolio_optimizer.py)"]
+        StressEngine["Macro Stress & Beta Simulator (portfolio_optimizer.py)"]
         SentimentSvc["NLP Sentiment Engine (sentiment_service.py)"]
         FeatureEng["Feature Builder - RSI, MACD, SMA (feature_builder.py)"]
         MLModels["GBDT, Ridge & Diffusion Ensemble (models/)"]
@@ -106,12 +107,12 @@ flowchart TD
     SingleStock --> Router
     PortfolioDash --> Router
     Router --> ForecastSvc
-    Router --> OptimizerEngine
+    Router --> StressEngine
     Router --> SentimentSvc
     ForecastSvc --> FeatureEng
     FeatureEng --> MLModels
     ForecastSvc --> AlpacaClient
-    OptimizerEngine --> AlpacaClient
+    StressEngine --> AlpacaClient
     SentimentSvc --> AlpacaAPI
     AlpacaClient <--> AlpacaAPI
 ```
@@ -130,7 +131,7 @@ stock-forecast/
 │   │   ├── feature_builder.py     # RSI, MACD, SMA, Bollinger, Volatility, Lags
 │   │   ├── forecast_service.py    # Pipeline coordinator (Single stock & Portfolio aggregation)
 │   │   ├── main.py                # FastAPI endpoints, CORS, static routes, health checks
-│   │   ├── portfolio_optimizer.py # Markowitz SLSQP solver, CAPM Betas & Macro Stress tests
+│   │   ├── portfolio_optimizer.py # CAPM Betas & Macro Stress tests
 │   │   ├── sentiment_service.py   # Alpaca live news API & financial NLP sentiment engine
 │   │   └── models/
 │   │       ├── gbdt_model.py      # Quantile HistGradientBoostingRegressor (10%, 50%, 90%)
@@ -139,9 +140,9 @@ stock-forecast/
 │   │       └── ensemble.py        # Consensus weighted blending
 ├── frontend/
 │   ├── index.html                 # Sleek single stock dashboard with news sentiment & PDF export
-│   ├── portfolio.html             # Dedicated portfolio manager with sector donut, MPT & simulator
+│   ├── portfolio.html             # Dedicated portfolio manager with sector donut & simulator
 │   ├── app.js                     # Single stock UI interactions, Chart.js instances, live sync
-│   ├── portfolio.js               # Portfolio calculations, AES vault, MPT tabs, crash slider
+│   ├── portfolio.js               # Portfolio calculations, AES vault, crash slider
 │   └── style.css                  # Apple-glass design, glowing badges, print stylesheet
 ├── Dockerfile                     # Production container spec (Python 3.14 + Uvicorn)
 ├── railway.json                   # Railway deployment configuration
@@ -159,8 +160,7 @@ stock-forecast/
 | `/api/stock/{ticker}/forecast?model={model}` | `GET` | 30-day and 3-year ML forecasts, support floors, earnings catalyst, and news sentiment for a ticker. |
 | `/api/stock/{ticker}/news` | `GET` | Live Alpaca breaking news wire, NLP sentiment score (-100 to +100), and top catalyst triggers. |
 | `/api/search?q={query}` | `GET` | Real-time autocomplete searching company names and tickers. |
-| `/api/portfolio/forecast` | `POST` | Aggregated 60-day & 3-year portfolio forecast, sector donut, concentration risk, and MPT optimization. |
-| `/api/portfolio/optimize` | `POST` | Computes Markowitz Efficient Frontier weights for Conservative, Balanced, or Aggressive profiles. |
+| `/api/portfolio/forecast` | `POST` | Aggregated 60-day & 3-year portfolio forecast, sector donut, concentration risk, and support floor defense. |
 | `/api/portfolio/stress-test` | `POST` | Simulates custom S&P 500 macro shocks (-30% to +30%) on portfolio equity using holding Betas. |
 | `/api/health` | `GET` | System health check and US market session status (Pre-Market, Regular, After-Hours, Closed). |
 

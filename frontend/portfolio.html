@@ -77,10 +77,10 @@
           <span id="market-status-text" class="font-medium text-[11px] text-slate-700 dark:text-slate-300">Checking Market...</span>
         </div>
 
-        <!-- 10m Live Sync Badge (Active during regular trading hours) -->
-        <div id="portfolio-live-badge" class="hidden items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md transition-all duration-300" title="Market is live: updating portfolio values & forecasts every 10 minutes at :00, :10, :20, :30, :40, :50">
+        <!-- Live Sync Badge (Active during market hours) -->
+        <div id="portfolio-live-badge" class="hidden items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold backdrop-blur-md transition-all duration-300" title="Auto-updating portfolio values & forecasts every 10 minutes">
           <span id="portfolio-live-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>10m Sync</span>
+          <span id="portfolio-live-text">Last Updated: --:--</span>
         </div>
 
         <!-- Privacy Shield Mask Button -->
@@ -134,7 +134,7 @@
       <div class="flex items-center justify-between pb-3 border-b-2 border-slate-900">
         <div>
           <h1 class="text-2xl font-black text-slate-900 tracking-tight">StockCast ML &bull; Portfolio Investment Memorandum</h1>
-          <p class="text-xs text-slate-600 font-medium">Aggregated Multi-Asset Machine Learning Forecast & Modern Portfolio Theory Report</p>
+          <p class="text-xs text-slate-600 font-medium">Aggregated Multi-Asset Machine Learning Forecast & Long-Term Investment Analysis</p>
         </div>
         <div class="text-right text-xs font-mono text-slate-500">
           <div>CONFIDENTIAL &bull; FOR INTERNAL USE</div>
@@ -451,95 +451,6 @@
           <div class="space-y-2 max-h-56 overflow-y-auto pr-1" id="sector-breakdown-list">
             <!-- Dynamically populated sector progress rows -->
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancing Section -->
-    <section id="portfolio-optimizer-section" class="p-6 rounded-3xl apple-glass space-y-5">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08] gap-3">
-        <div>
-          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-            <i data-lucide="sliders" class="w-4 h-4 text-indigo-500"></i>
-            <span>Modern Portfolio Theory (MPT) Optimizer & Automated Rebalancer</span>
-          </h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Markowitz mean-variance optimization (SLSQP) comparing Current vs Efficient Frontier target allocations.
-          </p>
-        </div>
-
-        <!-- Strategy Profile Tabs -->
-        <div class="flex p-1 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-xs">
-          <button id="profile-tab-balanced" type="button" class="optimizer-profile-tab active px-3 py-1.5 rounded-xl font-semibold transition" data-profile="balanced">
-            Balanced (Max Sharpe)
-          </button>
-          <button id="profile-tab-conservative" type="button" class="optimizer-profile-tab px-3 py-1.5 rounded-xl font-semibold transition text-slate-400 hover:text-slate-900 dark:hover:text-white" data-profile="conservative">
-            Conservative (Min Vol)
-          </button>
-          <button id="profile-tab-aggressive" type="button" class="optimizer-profile-tab px-3 py-1.5 rounded-xl font-semibold transition text-slate-400 hover:text-slate-900 dark:hover:text-white" data-profile="aggressive">
-            Aggressive (Growth)
-          </button>
-        </div>
-      </div>
-
-      <!-- Comparison Metrics Cards (3 Cards) -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <!-- Sharpe Ratio Improvement -->
-        <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
-          <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Sharpe Ratio</span>
-          <div class="flex items-baseline space-x-2">
-            <span id="opt-current-sharpe" class="text-lg font-bold text-slate-500 dark:text-slate-400">0.00</span>
-            <span class="text-slate-400">&rarr;</span>
-            <span id="opt-target-sharpe" class="text-2xl font-extrabold text-emerald-500">0.00</span>
-          </div>
-          <span id="opt-sharpe-delta" class="text-[11px] font-semibold text-emerald-500">Risk-Adjusted Efficiency</span>
-        </div>
-
-        <!-- Expected Volatility (Risk) -->
-        <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
-          <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Annual Volatility (&sigma;)</span>
-          <div class="flex items-baseline space-x-2">
-            <span id="opt-current-vol" class="text-lg font-bold text-slate-500 dark:text-slate-400">0.0%</span>
-            <span class="text-slate-400">&rarr;</span>
-            <span id="opt-target-vol" class="text-2xl font-extrabold text-cyan-500">0.0%</span>
-          </div>
-          <span id="opt-vol-delta" class="text-[11px] font-semibold text-cyan-500">Annual Risk Profile</span>
-        </div>
-
-        <!-- Expected Return -->
-        <div class="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] space-y-1">
-          <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Expected Annual Return</span>
-          <div class="flex items-baseline space-x-2">
-            <span id="opt-current-ret" class="text-lg font-bold text-slate-500 dark:text-slate-400">0.0%</span>
-            <span class="text-slate-400">&rarr;</span>
-            <span id="opt-target-ret" class="text-2xl font-extrabold text-indigo-500">0.0%</span>
-          </div>
-          <span id="opt-ret-delta" class="text-[11px] font-semibold text-indigo-500">Annual Return Target</span>
-        </div>
-      </div>
-
-      <!-- Rebalancing Action Plan Table -->
-      <div class="border border-black/[0.06] dark:border-white/[0.08] rounded-2xl overflow-hidden">
-        <div class="p-3.5 bg-black/[0.02] dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-200">
-          <span>Target Rebalancing Allocations & Trade Suggestions</span>
-          <span id="rebalance-status-summary" class="text-[11px] text-slate-400">Optimal weights for selected profile</span>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs font-mono">
-            <thead class="bg-black/[0.03] dark:bg-white/[0.04] text-slate-400 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th class="py-2.5 px-4 font-semibold">Asset</th>
-                <th class="py-2.5 px-4 text-right font-semibold">Current Weight</th>
-                <th class="py-2.5 px-4 text-right font-semibold">Target Weight</th>
-                <th class="py-2.5 px-4 text-right font-semibold">Allocation Shift</th>
-                <th class="py-2.5 px-4 text-right font-semibold">Rebalance Dollar Value</th>
-                <th class="py-2.5 px-4 text-center font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody id="rebalancing-tbody" class="divide-y divide-black/[0.03] dark:divide-white/[0.05]">
-              <!-- Dynamically populated rebalancing trades -->
-            </tbody>
-          </table>
         </div>
       </div>
     </section>
